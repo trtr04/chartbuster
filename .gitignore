@@ -1,0 +1,11 @@
+.DS_Store
+__pycache__/
+*.pyc
+
+# Raw Kaggle download (20 MB) — regenerate data/spotify_songs.js with data/build_data.py
+songs.csv
+*.zip
+
+# Local Claude Code settings (launch.json is shared on purpose)
+.claude/*
+!.claude/launch.json

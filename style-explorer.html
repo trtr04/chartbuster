@@ -1,0 +1,805 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Chart Busters · Music Style Explorer (prototype)</title>
+<style>
+  :root {
+    color-scheme: light;
+    --bg: #f4f3ef;
+    --surface-1: #fcfcfb;
+    --surface-2: #f0efea;
+    --border: #e2e0d8;
+    --text-primary: #0b0b0b;
+    --text-secondary: #52514e;
+    --text-muted: #85837c;
+    --grid: #e6e4dd;
+    --dot-bg: #c9c7bf;
+    --series-1: #2a78d6; /* taste profile / matches */
+    --series-2: #eb6834; /* baseline song */
+    --series-3: #1baf7a; /* hovered song */
+    --accent: #262624; --accent-ink: #fcfcfb;
+    --critical: #c63b3a;
+    --critical-bg: #fdeceb;
+    --warn-bg: #fff4dc;
+    --warn-ink: #7a5200;
+    --radius: 12px;
+  }
+  /* roles: blue = the searched song's value, orange = what you changed, aqua = recommendations / your chart */
+  :root { --baseline: var(--series-1); --change: var(--series-2); --match: var(--series-3); }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      color-scheme: dark;
+      --bg: #121211;
+      --surface-1: #1a1a19;
+      --surface-2: #242422;
+      --border: #33332f;
+      --text-primary: #f0efec;
+      --text-secondary: #c3c2b7;
+      --text-muted: #8f8d84;
+      --grid: #2e2e2b;
+      --dot-bg: #4a4945;
+      --series-1: #3987e5;
+      --series-2: #d95926;
+      --series-3: #199e70;
+      --accent: #e8e7e2; --accent-ink: #1a1a19;
+      --critical: #e66767;
+      --critical-bg: #3a1f1e;
+      --warn-bg: #3a2f14;
+      --warn-ink: #f2cf7d;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text-primary);
+    font: 14px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, sans-serif;
+  }
+  header {
+    display: flex; align-items: baseline; gap: 16px; flex-wrap: wrap;
+    padding: 20px 28px 8px;
+  }
+  header h1 { font-size: 20px; margin: 0; letter-spacing: -0.01em; }
+  header p { margin: 0; color: var(--text-secondary); }
+  .steps { display: flex; gap: 8px; padding: 0 28px 16px; flex-wrap: wrap; }
+  .step-chip {
+    font-size: 12px; padding: 4px 10px; border-radius: 999px;
+    background: var(--surface-2); color: var(--text-secondary); border: 1px solid var(--border);
+  }
+  .step-chip.done { background: var(--accent); color: var(--accent-ink); border-color: transparent; }
+  .step-chip.done::before { content: "✓ "; }
+
+  main {
+    display: grid; gap: 16px; padding: 0 28px 28px;
+    grid-template-columns: 340px minmax(0, 1fr) 360px;
+    align-items: start;
+  }
+  @media (max-width: 1200px) { main { grid-template-columns: 340px minmax(0, 1fr); } .col-3 { grid-column: 1 / -1; } }
+  @media (max-width: 780px) { main { grid-template-columns: 1fr; } }
+
+  .card {
+    background: var(--surface-1); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 16px 18px; margin-bottom: 16px;
+  }
+  .card h2 { font-size: 13px; margin: 0 0 2px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-secondary); }
+  .card .sub { color: var(--text-muted); font-size: 12px; margin: 0 0 12px; }
+  .num { display: inline-block; width: 18px; height: 18px; border-radius: 50%; border: 1.5px solid currentColor; text-align: center; font-size: 11px; line-height: 15px; margin-right: 6px; }
+
+  /* Search */
+  .search-row { display: flex; gap: 8px; position: relative; }
+  input[type="search"] {
+    flex: 1; padding: 9px 12px; border-radius: 8px; border: 1px solid var(--border);
+    background: var(--surface-2); color: var(--text-primary); font: inherit;
+  }
+  input[type="search"]:focus { outline: 2px solid var(--series-1); outline-offset: 1px; }
+  button {
+    font: inherit; cursor: pointer; border-radius: 8px; border: 1px solid var(--border);
+    background: var(--surface-2); color: var(--text-primary); padding: 8px 12px;
+  }
+  button:hover { border-color: var(--text-muted); }
+  button.primary { background: var(--accent); color: var(--accent-ink); border-color: transparent; }
+  button.ghost { background: transparent; }
+  button:focus-visible { outline: 2px solid var(--series-1); outline-offset: 2px; }
+  .suggest {
+    position: absolute; top: 42px; left: 0; right: 0; z-index: 20; display: none;
+    background: var(--surface-1); border: 1px solid var(--border); border-radius: 8px;
+    box-shadow: 0 8px 24px rgba(0,0,0,.12); max-height: 240px; overflow: auto;
+  }
+  .suggest div { padding: 8px 12px; cursor: pointer; }
+  .suggest div:hover, .suggest div.active { background: var(--surface-2); }
+  .suggest small { color: var(--text-muted); }
+  .baseline-pill {
+    margin-top: 10px; display: none; align-items: center; gap: 8px;
+    padding: 8px 10px; border-radius: 8px; background: var(--surface-2); font-size: 13px;
+  }
+  .baseline-pill .swatch { width: 10px; height: 10px; border-radius: 2px; background: var(--baseline); flex: none; }
+  .baseline-pill button { margin-left: auto; padding: 2px 8px; font-size: 12px; }
+
+  /* Vertical slider bank */
+  .vlegend { display: flex; gap: 14px; font-size: 12px; color: var(--text-secondary); margin-bottom: 10px; flex-wrap: wrap; }
+  .vlegend span { display: inline-flex; align-items: center; gap: 6px; }
+  .sq { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
+  .vbank { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; }
+  .vcol { display: flex; flex-direction: column; align-items: center; gap: 4px; min-width: 0; }
+  .vcol.off .vtrack, .vcol.off .vval { opacity: 0.35; }
+  .vcol input[type="checkbox"] { accent-color: var(--accent); margin: 0; }
+  .vval { font-size: 12px; font-variant-numeric: tabular-nums; height: 32px; text-align: center; line-height: 1.3; color: var(--text-secondary); }
+  .vval .from { color: var(--text-muted); text-decoration: line-through; font-size: 11px; display: block; }
+  .vval .to { color: var(--text-primary); font-weight: 700; }
+  .vval .to.changed { color: var(--change); filter: brightness(0.85); }
+  .vend { font-size: 10px; color: var(--text-muted); text-align: center; white-space: nowrap; }
+  .vtrack {
+    position: relative; width: 44px; height: 170px; cursor: ns-resize; touch-action: none; border-radius: 8px;
+  }
+  .vtrack:focus-visible { outline: 2px solid var(--baseline); outline-offset: 2px; }
+  .vtrack .rail { position: absolute; left: 50%; top: 0; bottom: 0; width: 4px; margin-left: -2px; border-radius: 2px; background: var(--grid); }
+  .vtrack .tick { position: absolute; left: 50%; width: 10px; height: 1px; margin-left: -5px; background: var(--border); }
+  .vtrack .delta { position: absolute; left: 50%; width: 4px; margin-left: -2px; background: var(--change); opacity: 0.5; border-radius: 2px; }
+  .vtrack .mk { position: absolute; left: 50%; width: 22px; height: 22px; margin: 0 0 -11px -11px; border-radius: 5px; border: 2px solid var(--surface-1); box-shadow: 0 1px 3px rgba(0,0,0,.25); }
+  .vtrack .mk.base { background: var(--baseline); }
+  .vtrack .mk.base.ghost { background: var(--surface-1); border: 2.5px solid var(--baseline); box-shadow: none; }
+  .vtrack .mk.handle { background: var(--change); z-index: 2; }
+  .vtrack .mk.handle.same { background: var(--baseline); }
+  .vtrack.dragging .mk.handle { transform: scale(1.12); }
+  .vname { font-weight: 600; font-size: 12px; text-align: center; line-height: 1.2; }
+  .vname svg { display: block; margin: 0 auto 2px; }
+  .reset-row { display: flex; justify-content: space-between; align-items: center; margin-top: 10px; font-size: 12px; color: var(--text-muted); gap: 8px; }
+  .reset-row button { font-size: 12px; padding: 4px 10px; }
+  input[type="range"] { width: 100%; accent-color: var(--accent); margin: 6px 0 2px; }
+  .tolerance { display: flex; align-items: center; gap: 10px; margin-top: 14px; padding-top: 12px; border-top: 1px dashed var(--border); font-size: 13px; color: var(--text-secondary); }
+  .tolerance input { flex: 1; }
+
+  /* Scatter */
+  .viz-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; }
+  .legend { display: flex; gap: 14px; font-size: 12px; color: var(--text-secondary); flex-wrap: wrap; }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .legend i { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+  .axis-select { font-size: 12px; color: var(--text-secondary); display: flex; gap: 8px; align-items: center; }
+  select { font: inherit; padding: 4px 6px; border-radius: 6px; border: 1px solid var(--border); background: var(--surface-2); color: var(--text-primary); }
+  #scatter { width: 100%; height: auto; display: block; }
+  .tooltip {
+    position: fixed; pointer-events: none; z-index: 50; display: none;
+    background: var(--surface-1); color: var(--text-primary); border: 1px solid var(--border);
+    border-radius: 8px; padding: 8px 10px; font-size: 12px; box-shadow: 0 6px 18px rgba(0,0,0,.15); max-width: 240px;
+  }
+  .tooltip b { display: block; font-size: 13px; }
+  .tooltip .muted { color: var(--text-muted); }
+
+  /* Results */
+  .banner { display: none; padding: 10px 12px; border-radius: 8px; margin-bottom: 12px; font-size: 13px; }
+  .banner.warn { display: block; background: var(--warn-bg); color: var(--warn-ink); }
+  .banner b { display: block; }
+  .banner button { margin-top: 8px; margin-right: 6px; font-size: 12px; padding: 4px 10px; }
+  .results.stale { opacity: 0.45; filter: grayscale(0.6); pointer-events: none; }
+  .song {
+    display: grid; grid-template-columns: 30px 40px minmax(0, 1fr) auto; gap: 10px; align-items: center;
+    padding: 8px 6px; border-radius: 8px; border-bottom: 1px solid var(--border);
+  }
+  .song:last-child { border-bottom: none; }
+  .song:hover { background: var(--surface-2); }
+  .play {
+    width: 36px; height: 36px; border-radius: 50%; padding: 0; display: grid; place-items: center;
+    background: var(--accent); color: var(--accent-ink); border: none; font-size: 13px;
+  }
+  .play.art { background-size: cover; background-position: center; color: #fff; text-shadow: 0 1px 3px rgba(0,0,0,.6); border-radius: 6px; width: 40px; height: 40px; box-shadow: inset 0 0 0 40px rgba(0,0,0,.25); }
+  .play.art:hover { box-shadow: inset 0 0 0 40px rgba(0,0,0,.45); }
+  .play.playing { outline: 3px solid var(--match); outline-offset: 1px; }
+  .player { display: none; margin-bottom: 12px; }
+  .player.show { display: block; }
+  .player-head { display: flex; justify-content: space-between; align-items: center; font-size: 12px; color: var(--text-muted); margin-bottom: 4px; }
+  .player-head a { color: var(--text-secondary); }
+  .player iframe { width: 100%; height: 80px; border: 0; border-radius: 12px; display: block; }
+  .song .title { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .song .meta { color: var(--text-muted); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .match { font-size: 11px; color: var(--text-secondary); font-variant-numeric: tabular-nums; text-align: right; }
+  .rank { width: 28px; height: 28px; border: 2px solid var(--text-primary); border-radius: 6px; display: grid; place-items: center; font-weight: 700; font-size: 14px; font-variant-numeric: tabular-nums; }
+  .addchk { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; margin-top: 4px; cursor: pointer; color: var(--text-secondary); white-space: nowrap; }
+  .addchk input { accent-color: var(--match); width: 16px; height: 16px; margin: 0; cursor: pointer; }
+  .addchk.on { color: var(--text-primary); font-weight: 600; }
+  .count { color: var(--text-muted); font-weight: 400; text-transform: none; letter-spacing: 0; }
+
+  /* Spider */
+  .empty {
+    text-align: center; color: var(--text-muted); padding: 28px 12px; border: 1.5px dashed var(--border); border-radius: 10px; font-size: 13px;
+  }
+  .empty b { display: block; color: var(--text-secondary); margin-bottom: 4px; font-size: 14px; }
+  #radar { width: 100%; height: auto; display: none; }
+  .chosen { margin-top: 10px; max-height: 260px; overflow: auto; }
+  .chip-row { display: flex; justify-content: space-between; align-items: center; padding: 6px 8px; border-radius: 6px; font-size: 13px; cursor: default; }
+  .chip-row:hover { background: var(--surface-2); }
+  .chip-row small { color: var(--text-muted); }
+  .chip-row button { padding: 0 8px; font-size: 12px; }
+  .tag { font-size: 10px; padding: 1px 6px; border-radius: 999px; background: var(--surface-2); color: var(--text-secondary); margin-left: 6px; border: 1px solid var(--border); }
+  details { margin-top: 10px; font-size: 12px; color: var(--text-secondary); }
+  table { border-collapse: collapse; width: 100%; margin-top: 6px; font-variant-numeric: tabular-nums; }
+  th, td { text-align: left; padding: 4px 6px; border-bottom: 1px solid var(--border); }
+
+  /* Error screen */
+  .overlay {
+    position: fixed; inset: 0; background: rgba(10,10,10,.45); display: none; place-items: center; z-index: 100; padding: 20px;
+  }
+  .overlay.show { display: grid; }
+  .modal {
+    background: var(--surface-1); border-radius: 16px; padding: 28px; max-width: 440px; width: 100%;
+    border-top: 4px solid var(--critical); box-shadow: 0 20px 50px rgba(0,0,0,.3);
+  }
+  .modal .icon { width: 40px; height: 40px; border-radius: 50%; background: var(--critical-bg); color: var(--critical); display: grid; place-items: center; font-weight: 700; font-size: 20px; margin-bottom: 12px; }
+  .modal h3 { margin: 0 0 6px; font-size: 18px; }
+  .modal p { margin: 0 0 14px; color: var(--text-secondary); }
+  .modal .sugg button { margin: 0 6px 6px 0; font-size: 13px; }
+  .modal .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; }
+  .toast {
+    position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: var(--text-primary); color: var(--surface-1);
+    padding: 8px 14px; border-radius: 8px; font-size: 13px; opacity: 0; transition: opacity .2s; pointer-events: none; z-index: 120;
+  }
+  .toast.show { opacity: 1; }
+  .note { font-size: 11px; color: var(--text-muted); padding: 0 28px 24px; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Music Style Explorer</h1>
+  <p>Find music by its attributes, then see your taste as a spider chart.</p>
+</header>
+<div class="steps" id="steps">
+  <span class="step-chip" data-step="mood">Pick a mood</span>
+  <span class="step-chip" data-step="search">① Set a baseline song</span>
+  <span class="step-chip" data-step="adjust">② Adjust attributes</span>
+  <span class="step-chip" data-step="listen">Listen to matches</span>
+  <span class="step-chip" data-step="spider">③ Generate spider chart</span>
+</div>
+
+<main>
+  <!-- ============ Column 1: controls ============ -->
+  <section class="col-1">
+    <div class="card">
+      <h2><span class="num">1</span>Search for a song</h2>
+      <p class="sub">Pick a song you like — the sliders jump to its attributes.</p>
+      <div class="search-row">
+        <input type="search" id="search" placeholder="🔍  e.g. All I Want for Christmas" autocomplete="off" aria-label="Search for a song" />
+        <button class="primary" id="searchBtn">Set</button>
+        <div class="suggest" id="suggest" role="listbox"></div>
+      </div>
+      <div class="baseline-pill" id="baselinePill">
+        <span class="swatch"></span><span id="baselineText"></span>
+        <button class="ghost" id="clearBaseline">Clear</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2><span class="num">2</span>Tune the attributes</h2>
+      <p class="sub">Drag a slider up or down. Uncheck one to ignore it.</p>
+      <div class="vlegend">
+        <span><i class="sq" style="background:var(--baseline)"></i>Song's value</span>
+        <span><i class="sq" style="background:var(--change)"></i>Your change</span>
+      </div>
+      <div class="vbank" id="sliders"></div>
+      <div class="reset-row" id="resetRow" style="display:none">
+        <span id="changedCount"></span>
+        <button class="ghost" id="resetBtn">↺ Reset to song</button>
+      </div>
+      <div class="tolerance">
+        <span>Match tolerance</span>
+        <input type="range" id="tol" min="5" max="40" value="20" aria-label="Match tolerance" />
+        <span id="tolVal" style="font-variant-numeric:tabular-nums;width:34px;text-align:right">±20</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ Column 2: background map + results ============ -->
+  <section class="col-2">
+    <div class="card">
+      <div class="viz-head">
+        <div>
+          <h2>Song map</h2>
+          <p class="sub">Every song in the dataset. Matches light up as you move the sliders.</p>
+        </div>
+        <div class="axis-select">
+          X <select id="xAxis"></select>
+          Y <select id="yAxis"></select>
+        </div>
+      </div>
+      <div class="legend" style="margin-bottom:6px">
+        <span><i style="background:var(--dot-bg)"></i>Other songs</span>
+        <span><i style="background:var(--match)"></i>Recommended</span>
+        <span><i style="background:transparent;border:2.5px solid var(--baseline)"></i>Searched song</span>
+        <span><i style="background:transparent;border:1.5px dashed var(--change);border-radius:2px"></i>Your target range</span>
+      </div>
+      <svg id="scatter" viewBox="0 0 640 400" role="img" aria-label="Scatter plot of songs"></svg>
+    </div>
+
+    <div class="card">
+      <h2>Our recommendations <span class="count" id="matchCount"></span></h2>
+      <p class="sub">Play to listen, tick <b>Add to chart</b> to put a song on your spider chart (played songs are added for you).</p>
+      <div class="player" id="player">
+        <div class="player-head"><span>Now playing</span><span><a id="openSpotify" target="_blank" rel="noopener">Open in Spotify ↗</a> · <button class="ghost" id="closePlayer" style="padding:0 6px;font-size:12px">Close ✕</button></span></div>
+        <div id="playerFrame"></div>
+      </div>
+      <div class="banner" id="noMatch"></div>
+      <div class="results" id="results"></div>
+    </div>
+  </section>
+
+  <!-- ============ Column 3: spider ============ -->
+  <section class="col-3">
+    <div class="card">
+      <h2><span class="num">3</span>Your style profile</h2>
+      <p class="sub">Built from every song you played or added.</p>
+      <div class="legend" id="radarLegend" style="margin-bottom:6px;display:none">
+        <span><i style="background:var(--match)"></i>Your chart (avg.)</span>
+        <span id="lgBaseline"><i style="background:transparent;border:2px dashed var(--baseline)"></i>Searched song</span>
+        <span id="lgTarget"><i style="background:transparent;border:2px solid var(--change)"></i>Your target</span>
+        <span id="lgHover" style="display:none"><i style="background:var(--text-secondary)"></i><span id="lgHoverName">Hovered</span></span>
+      </div>
+      <div class="empty" id="radarEmpty">
+        <b>No chart yet</b>
+        Tick <strong>Add to chart</strong> on a recommendation (or play one) to generate your spider chart.
+      </div>
+      <svg id="radar" viewBox="0 0 360 320" role="img" aria-label="Spider chart of chosen songs"></svg>
+      <div class="chosen" id="chosen"></div>
+      <details id="radarTableWrap" style="display:none">
+        <summary>Show as table</summary>
+        <div id="radarTable"></div>
+      </details>
+    </div>
+  </section>
+</main>
+
+<p class="note">Prototype · Data: <a href="https://www.kaggle.com/datasets/rishabhpancholi1302/spotify-most-popular-songs-dataset" target="_blank" rel="noopener">Spotify Most Popular Songs Dataset</a> (Kaggle, 900 tracks, mostly 2015–2020). Audio features are relative 0–100 scores within this dataset (min-max scaled), so tempo is “slower ↔ faster”, not BPM. Playback uses Spotify's embedded player.</p>
+
+<!-- Error screen (search fail) -->
+<div class="overlay" id="errorOverlay" role="dialog" aria-modal="true" aria-labelledby="errTitle">
+  <div class="modal">
+    <div class="icon">!</div>
+    <h3 id="errTitle">Song not found</h3>
+    <p id="errMsg"></p>
+    <div class="sugg" id="errSugg"></div>
+    <div class="actions">
+      <button id="errBrowse">Skip — use sliders</button>
+      <button class="primary" id="errRetry">Try another search</button>
+    </div>
+  </div>
+</div>
+
+<div class="tooltip" id="tip"></div>
+<div class="toast" id="toast"></div>
+
+<script src="data/spotify_songs.js"></script>
+<script>
+// ---------------------------------------------------------------- data
+// Data: data/spotify_songs.js (Kaggle "Spotify Most Popular Songs Dataset", 900 tracks).
+// Features there are min-max scaled across the dataset, so every attribute — tempo and popularity included — is a relative 0–100 score.
+const ART = (hash, size) => `https://i.scdn.co/image/ab67616d${size === "sm" ? "00004851" : "00001e02"}${hash}`;
+const SONGS = (window.SONG_DATA || []).map((r, i) => ({
+  id: i, title: r[0], artist: r[1], year: r[2],
+  mood: r[3], energy: r[4], dance: r[5], acoustic: r[6], tempo: r[7], pop: r[8],
+  genre: r[9], trackId: r[10], art: r[11],
+}));
+
+// Attributes that drive matching / sliders / spider axes.
+const ATTRS = [
+  { key: "mood",     label: "Mood",         lo: "Sad",       hi: "Happy",     fmt: v => Math.round(v) },
+  { key: "energy",   label: "Energy",       lo: "Calm",      hi: "Intense",   fmt: v => Math.round(v) },
+  { key: "dance",    label: "Danceability", short: "Dance", lo: "Still",     hi: "Groovy",    fmt: v => Math.round(v) },
+  { key: "acoustic", label: "Acousticness", short: "Acoustic", lo: "Electric",hi: "Acoustic",  fmt: v => Math.round(v) },
+  { key: "tempo",    label: "Tempo",        lo: "Slower",    hi: "Faster",    fmt: v => Math.round(v) },
+];
+const norm = (s, k) => s[k];
+
+// ---------------------------------------------------------------- state
+const state = {
+  target: { mood: 70, energy: 60, dance: 60, acoustic: 30, tempo: 50 },
+  enabled: { mood: true, energy: true, dance: true, acoustic: false, tempo: false },
+  tol: 20,
+  baseline: null,
+  matches: [],
+  chosen: new Map(),   // id -> "played" | "added"
+  hoverId: null,
+  playing: null,
+  steps: new Set(),
+};
+const $ = id => document.getElementById(id);
+
+function markStep(s) {
+  state.steps.add(s);
+  document.querySelectorAll(".step-chip").forEach(c => c.classList.toggle("done", state.steps.has(c.dataset.step)));
+}
+function toast(msg) {
+  const t = $("toast"); t.textContent = msg; t.classList.add("show");
+  clearTimeout(toast._t); toast._t = setTimeout(() => t.classList.remove("show"), 1800);
+}
+
+// ---------------------------------------------------------------- mood face (lives on the Mood slider)
+const MOODS = [[15, "Melancholy"], [35, "Moody"], [55, "Balanced"], [78, "Upbeat"], [101, "Euphoric"]];
+function faceSVG(v) {
+  const curve = 43 + (v - 50) / 50 * 15, endY = 44 - (v - 50) / 50 * 5;
+  return `<svg width="30" height="30" viewBox="0 0 64 64" aria-hidden="true"><circle cx="32" cy="32" r="29" fill="#f6c94c" stroke="#d9a520" stroke-width="3"/><circle cx="22" cy="25" r="4" fill="#3b2a10"/><circle cx="42" cy="25" r="4" fill="#3b2a10"/><path d="M18 ${endY} Q32 ${curve} 46 ${endY}" stroke="#3b2a10" stroke-width="4" fill="none" stroke-linecap="round"/></svg>`;
+}
+
+// ---------------------------------------------------------------- vertical sliders
+// Blue square = the searched song's value (fixed). Orange square = your value once it differs.
+function buildSliders() {
+  const host = $("sliders");
+  ATTRS.forEach(a => {
+    const col = document.createElement("div");
+    col.className = "vcol"; col.id = "sl-" + a.key;
+    let ticks = ""; for (let i = 0; i <= 100; i += 25) ticks += `<div class="tick" style="bottom:${i}%"></div>`;
+    col.innerHTML = `
+      <input type="checkbox" id="en-${a.key}" aria-label="Use ${a.label} for matching" title="Use for matching">
+      <div class="vval" id="val-${a.key}"></div>
+      <div class="vend">${a.hi}</div>
+      <div class="vtrack" id="tr-${a.key}" role="slider" tabindex="0" aria-label="${a.label}" aria-valuemin="0" aria-valuemax="100" aria-orientation="vertical">
+        <div class="rail"></div>${ticks}
+        <div class="delta" id="dl-${a.key}"></div>
+        <div class="mk base" id="bs-${a.key}"></div>
+        <div class="mk handle" id="hd-${a.key}"></div>
+      </div>
+      <div class="vend">${a.lo}</div>
+      <div class="vname" id="nm-${a.key}" title="${a.label}">${a.short || a.label}</div>`;
+    host.appendChild(col);
+
+    const tr = col.querySelector(".vtrack");
+    const setFromY = y => {
+      const r = tr.getBoundingClientRect();
+      setAttr(a.key, Math.round(Math.max(0, Math.min(100, (r.bottom - y) / r.height * 100))));
+    };
+    tr.addEventListener("pointerdown", e => { tr.setPointerCapture(e.pointerId); tr.classList.add("dragging"); tr.focus(); setFromY(e.clientY); });
+    tr.addEventListener("pointermove", e => { if (tr.hasPointerCapture(e.pointerId)) setFromY(e.clientY); });
+    tr.addEventListener("pointerup", () => tr.classList.remove("dragging"));
+    tr.addEventListener("keydown", e => {
+      const step = { ArrowUp: 1, ArrowRight: 1, ArrowDown: -1, ArrowLeft: -1, PageUp: 10, PageDown: -10 }[e.key];
+      if (step) { setAttr(a.key, Math.max(0, Math.min(100, Math.round(state.target[a.key]) + step))); e.preventDefault(); }
+      else if (e.key === "Home") { setAttr(a.key, 0); e.preventDefault(); }
+      else if (e.key === "End") { setAttr(a.key, 100); e.preventDefault(); }
+    });
+    $("en-" + a.key).addEventListener("change", e => {
+      state.enabled[a.key] = e.target.checked; markStep("adjust"); syncSliders(); update();
+    });
+  });
+  $("resetBtn").addEventListener("click", () => { if (state.baseline) setBaseline(state.baseline, true); });
+}
+function setAttr(k, v) {
+  state.target[k] = v; state.enabled[k] = true;
+  markStep(k === "mood" ? "mood" : "adjust"); syncSliders(); update();
+}
+function baseVal(k) { return state.baseline ? Math.round(norm(state.baseline, k)) : null; }
+function syncSliders() {
+  let changed = 0;
+  ATTRS.forEach(a => {
+    const v = state.target[a.key], b = baseVal(a.key);
+    const same = b !== null && Math.abs(v - b) < 1;
+    if (b !== null && !same) changed++;
+    $("en-" + a.key).checked = state.enabled[a.key];
+    $("sl-" + a.key).classList.toggle("off", !state.enabled[a.key]);
+    const tr = $("tr-" + a.key);
+    tr.setAttribute("aria-valuenow", Math.round(v));
+    tr.setAttribute("aria-valuetext", a.fmt(v) + (b !== null && !same ? ` (song: ${a.fmt(b)})` : ""));
+    const hd = $("hd-" + a.key), bs = $("bs-" + a.key), dl = $("dl-" + a.key);
+    hd.style.bottom = v + "%";
+    // no song yet → your own setting (orange); song set & unchanged → blue; changed → orange + blue ghost
+    hd.classList.toggle("same", same);
+    bs.style.display = b !== null && !same ? "block" : "none";
+    if (b !== null) bs.style.bottom = b + "%";
+    dl.style.display = b !== null && !same ? "block" : "none";
+    if (b !== null) { dl.style.bottom = Math.min(v, b) + "%"; dl.style.height = Math.abs(v - b) + "%"; }
+    $("val-" + a.key).innerHTML = b !== null && !same
+      ? `<span class="from">${a.fmt(b)}</span><span class="to changed">${a.fmt(v)}</span>`
+      : `<span class="from">&nbsp;</span><span class="to">${a.fmt(v)}</span>`;
+    if (a.key === "mood") {
+      const label = MOODS.find(m => v < m[0])[1];
+      $("nm-mood").innerHTML = faceSVG(v) + "Mood";
+      $("nm-mood").title = label;
+    }
+  });
+  $("resetRow").style.display = state.baseline ? "flex" : "none";
+  $("changedCount").textContent = state.baseline
+    ? (changed ? `${changed} attribute${changed > 1 ? "s" : ""} changed from “${state.baseline.title}”` : `Matching “${state.baseline.title}” exactly`)
+    : "";
+  $("resetBtn").disabled = !changed;
+}
+$("tol").addEventListener("input", e => { state.tol = +e.target.value; $("tolVal").textContent = "±" + state.tol; update(); });
+
+// animate sliders to a song's values (step ① success)
+function animateTo(values) {
+  const from = { ...state.target }, t0 = performance.now(), dur = 600;
+  function frame(now) {
+    const p = Math.min(1, (now - t0) / dur), e = 1 - Math.pow(1 - p, 3);
+    ATTRS.forEach(a => state.target[a.key] = from[a.key] + (values[a.key] - from[a.key]) * e);
+    syncSliders(); renderScatter();
+    if (p < 1) requestAnimationFrame(frame);
+    else { ATTRS.forEach(a => state.target[a.key] = Math.round(values[a.key])); syncSliders(); update(); }
+  }
+  requestAnimationFrame(frame);
+}
+
+// ---------------------------------------------------------------- search
+const clean = s => s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9 ]/g, "").trim();
+function lev(a, b) {
+  const m = Array.from({ length: a.length + 1 }, (_, i) => [i]);
+  for (let j = 1; j <= b.length; j++) m[0][j] = j;
+  for (let i = 1; i <= a.length; i++) for (let j = 1; j <= b.length; j++)
+    m[i][j] = Math.min(m[i-1][j] + 1, m[i][j-1] + 1, m[i-1][j-1] + (a[i-1] === b[j-1] ? 0 : 1));
+  return m[a.length][b.length];
+}
+function findSongs(q) {
+  const c = clean(q); if (!c) return [];
+  return SONGS.filter(s => clean(s.title).includes(c) || clean(s.artist).includes(c) || clean(s.title + " " + s.artist).includes(c));
+}
+function nearestTitles(q, n = 3) {
+  const c = clean(q);
+  return SONGS.map(s => ({ s, d: lev(c, clean(s.title).slice(0, Math.max(c.length, 4))) }))
+    .sort((a, b) => a.d - b.d).slice(0, n).map(x => x.s);
+}
+let activeIdx = -1;
+function renderSuggest() {
+  const q = $("search").value, box = $("suggest");
+  const list = findSongs(q).slice(0, 6);
+  activeIdx = -1;
+  if (!q || !list.length) { box.style.display = "none"; return; }
+  box.innerHTML = list.map(s => `<div role="option" data-id="${s.id}">${s.title} <small>· ${s.artist} · ${s.year}</small></div>`).join("");
+  box.style.display = "block";
+  box.querySelectorAll("div").forEach(d => d.addEventListener("mousedown", e => { e.preventDefault(); setBaseline(SONGS[+d.dataset.id]); }));
+}
+$("search").addEventListener("input", renderSuggest);
+$("search").addEventListener("blur", () => setTimeout(() => $("suggest").style.display = "none", 100));
+$("search").addEventListener("keydown", e => {
+  const items = [...$("suggest").querySelectorAll("div")];
+  if (e.key === "ArrowDown" && items.length) { activeIdx = (activeIdx + 1) % items.length; e.preventDefault(); }
+  else if (e.key === "ArrowUp" && items.length) { activeIdx = (activeIdx - 1 + items.length) % items.length; e.preventDefault(); }
+  else if (e.key === "Enter") {
+    e.preventDefault();
+    if (activeIdx >= 0 && items[activeIdx]) setBaseline(SONGS[+items[activeIdx].dataset.id]); else submitSearch();
+    return;
+  } else if (e.key === "Escape") { $("suggest").style.display = "none"; return; }
+  items.forEach((it, i) => it.classList.toggle("active", i === activeIdx));
+});
+$("searchBtn").addEventListener("click", submitSearch);
+
+function submitSearch() {
+  const q = $("search").value.trim();
+  if (!q) { $("search").focus(); return; }
+  const hits = findSongs(q);
+  if (hits.length) setBaseline(hits[0]);
+  else showError(q);                      // step ① fail → error screen
+}
+function setBaseline(s, isReset) {
+  state.baseline = s;
+  $("search").value = ""; $("suggest").style.display = "none";
+  $("baselinePill").style.display = "flex";
+  $("baselineText").innerHTML = `<b>${s.title}</b>&nbsp;· ${s.artist}`;
+  ATTRS.forEach(a => state.enabled[a.key] = true);
+  const vals = {}; ATTRS.forEach(a => vals[a.key] = norm(s, a.key));
+  markStep("search");
+  animateTo(vals);
+  toast(isReset ? `Sliders reset to “${s.title}”` : `Sliders set to “${s.title}”`);
+}
+$("clearBaseline").addEventListener("click", () => { state.baseline = null; $("baselinePill").style.display = "none"; syncSliders(); update(); });
+
+function showError(q) {
+  $("errMsg").innerHTML = `We couldn't find <b>“${q.replace(/</g, "&lt;")}”</b> in our dataset of ${SONGS.length} songs. Did you mean one of these?`;
+  $("errSugg").innerHTML = nearestTitles(q).map(s => `<button data-id="${s.id}">${s.title} <span style="color:var(--text-muted)">· ${s.artist}</span></button>`).join("");
+  $("errSugg").querySelectorAll("button").forEach(b => b.addEventListener("click", () => { hideError(); setBaseline(SONGS[+b.dataset.id]); }));
+  $("errorOverlay").classList.add("show");
+  $("errRetry").focus();
+}
+function hideError() { $("errorOverlay").classList.remove("show"); }
+$("errRetry").addEventListener("click", () => { hideError(); $("search").select(); $("search").focus(); });
+$("errBrowse").addEventListener("click", () => { hideError(); $("search").value = ""; $("tr-energy").focus(); });
+$("errorOverlay").addEventListener("click", e => { if (e.target.id === "errorOverlay") hideError(); });
+document.addEventListener("keydown", e => { if (e.key === "Escape") hideError(); });
+
+// ---------------------------------------------------------------- matching
+function computeMatches() {
+  const keys = ATTRS.map(a => a.key).filter(k => state.enabled[k]);
+  if (!keys.length) return [];
+  return SONGS.map(s => {
+    let ok = true, d2 = 0;
+    keys.forEach(k => { const diff = Math.abs(norm(s, k) - state.target[k]); if (diff > state.tol) ok = false; d2 += diff * diff; });
+    const dist = Math.sqrt(d2 / keys.length);
+    return { s, ok, score: Math.max(0, Math.round(100 - dist * 1.6)) };
+  }).filter(m => m.ok).sort((a, b) => b.score - a.score || b.s.pop - a.s.pop);
+}
+function nearestOverall() {
+  const keys = ATTRS.map(a => a.key).filter(k => state.enabled[k]);
+  return SONGS.map(s => ({ s, d: keys.reduce((t, k) => t + (norm(s, k) - state.target[k]) ** 2, 0) })).sort((a, b) => a.d - b.d)[0].s;
+}
+
+function update() {
+  const m = computeMatches();
+  const banner = $("noMatch"), res = $("results");
+  if (m.length === 0) {
+    // step ② fail: nothing matches — keep previous results, but mark them stale
+    const near = nearestOverall();
+    banner.className = "banner warn";
+    banner.innerHTML = `<b>No songs match these settings.</b>
+      The song map and the list below are unchanged from your last match. Try widening the tolerance, or jump to the closest song.
+      <div><button id="widen">Widen tolerance to ±${Math.min(40, state.tol + 10)}</button><button id="jumpNear">Closest: ${near.title}</button></div>`;
+    $("widen").onclick = () => { state.tol = Math.min(40, state.tol + 10); $("tol").value = state.tol; $("tolVal").textContent = "±" + state.tol; update(); };
+    $("jumpNear").onclick = () => setBaseline(near);
+    res.classList.add("stale");
+    $("matchCount").textContent = "· 0 found";
+    renderScatter(true);
+    return;
+  }
+  banner.className = "banner";
+  res.classList.remove("stale");
+  state.matches = m;
+  $("matchCount").textContent = `· ${m.length} found`;
+  renderResults();
+  renderScatter(false);
+}
+
+function renderResults() {
+  const res = $("results");
+  res.innerHTML = state.matches.slice(0, 8).map(({ s, score }, rank) => {
+    const chosen = state.chosen.has(s.id), playing = state.playing && state.playing.id === s.id;
+    return `<div class="song ${playing ? "is-playing" : ""}" data-id="${s.id}">
+      <div class="rank" aria-label="Rank ${rank + 1}">${rank + 1}</div>
+      <button class="play art ${playing ? "playing" : ""}" data-play="${s.id}" style="background-image:url('${ART(s.art, "sm")}')" aria-label="${playing ? "Close player for" : "Play"} ${s.title}">${playing ? "■" : "▶"}</button>
+      <div style="min-width:0">
+        <div class="title">${s.title}</div>
+        <div class="meta">${s.artist} · ${s.year} · ${s.genre} · popularity ${s.pop}</div>
+      </div>
+      <div style="text-align:right">
+        <div class="match">${score}% match</div>
+        <label class="addchk ${chosen ? "on" : ""}"><input type="checkbox" data-add="${s.id}" ${chosen ? "checked" : ""}>Add to chart</label>
+      </div>
+    </div>`;
+  }).join("") + (state.matches.length > 8 ? `<p class="sub" style="margin:8px 6px 0">+ ${state.matches.length - 8} more on the map — tighten tolerance to narrow down.</p>` : "");
+  res.querySelectorAll("[data-play]").forEach(b => b.onclick = () => togglePlay(SONGS[+b.dataset.play]));
+  res.querySelectorAll("[data-add]").forEach(b => b.onchange = () => toggleChosen(SONGS[+b.dataset.add]));
+  res.querySelectorAll(".song").forEach(r => {
+    r.onmouseenter = () => { state.hoverId = +r.dataset.id; renderScatter(); renderRadar(); };
+    r.onmouseleave = () => { state.hoverId = null; renderScatter(); renderRadar(); };
+  });
+}
+
+// ---------------------------------------------------------------- playback (simulated)
+function togglePlay(s) {
+  if (state.playing && state.playing.id === s.id) { stopPlay(); renderResults(); return; }
+  state.playing = { id: s.id };
+  $("playerFrame").innerHTML = `<iframe title="Spotify player: ${s.title.replace(/"/g, "&quot;")}" src="https://open.spotify.com/embed/track/${s.trackId}?utm_source=generator" allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture" loading="lazy"></iframe>`;
+  $("openSpotify").href = `https://open.spotify.com/track/${s.trackId}`;
+  $("player").classList.add("show");
+  if (!state.chosen.has(s.id)) { state.chosen.set(s.id, "played"); toast(`“${s.title}” added to your chart`); }
+  markStep("listen");
+  renderResults(); renderProfile();
+}
+function stopPlay() { state.playing = null; $("player").classList.remove("show"); $("playerFrame").innerHTML = ""; }
+$("closePlayer").addEventListener("click", () => { stopPlay(); renderResults(); });
+function toggleChosen(s) {
+  if (state.chosen.has(s.id)) state.chosen.delete(s.id); else state.chosen.set(s.id, "added");
+  renderResults(); renderProfile();
+}
+
+// ---------------------------------------------------------------- scatter (background map)
+const AX_OPTS = ATTRS.map(a => a.key);
+let xKey = "energy", yKey = "mood";
+function initAxes() {
+  [["xAxis", "energy"], ["yAxis", "mood"]].forEach(([id, def]) => {
+    $(id).innerHTML = ATTRS.map(a => `<option value="${a.key}" ${a.key === def ? "selected" : ""}>${a.label}</option>`).join("");
+    $(id).onchange = e => { if (id === "xAxis") xKey = e.target.value; else yKey = e.target.value; renderScatter(); };
+  });
+}
+let lastMatchIds = new Set();
+function renderScatter(stale) {
+  if (stale === false) lastMatchIds = new Set(state.matches.map(m => m.s.id));
+  const W = 640, H = 400, L = 48, R = 16, T = 12, B = 40;
+  const x = v => L + v / 100 * (W - L - R), y = v => H - B - v / 100 * (H - T - B);
+  const xa = ATTRS.find(a => a.key === xKey), ya = ATTRS.find(a => a.key === yKey);
+  let g = "";
+  for (let i = 0; i <= 100; i += 25) {
+    g += `<line x1="${x(i)}" x2="${x(i)}" y1="${T}" y2="${H - B}" stroke="var(--grid)"/>`;
+    g += `<line x1="${L}" x2="${W - R}" y1="${y(i)}" y2="${y(i)}" stroke="var(--grid)"/>`;
+    g += `<text x="${x(i)}" y="${H - B + 16}" font-size="11" fill="var(--text-muted)" text-anchor="middle">${i}</text>`;
+    g += `<text x="${L - 8}" y="${y(i) + 4}" font-size="11" fill="var(--text-muted)" text-anchor="end">${i}</text>`;
+  }
+  g += `<text x="${(L + W - R) / 2}" y="${H - 6}" font-size="12" fill="var(--text-secondary)" text-anchor="middle">${xa.label} → (${xa.lo} … ${xa.hi})</text>`;
+  g += `<text transform="translate(14 ${(T + H - B) / 2}) rotate(-90)" font-size="12" fill="var(--text-secondary)" text-anchor="middle">${ya.label} → (${ya.lo} … ${ya.hi})</text>`;
+
+  // target window (only drawn on enabled axes)
+  const tx = state.target[xKey], ty = state.target[yKey], t = state.tol;
+  const x0 = state.enabled[xKey] ? Math.max(0, tx - t) : 0, x1 = state.enabled[xKey] ? Math.min(100, tx + t) : 100;
+  const y0 = state.enabled[yKey] ? Math.max(0, ty - t) : 0, y1 = state.enabled[yKey] ? Math.min(100, ty + t) : 100;
+  g += `<rect x="${x(x0)}" y="${y(y1)}" width="${x(x1) - x(x0)}" height="${y(y0) - y(y1)}" rx="6" fill="var(--change)" fill-opacity="0.06" stroke="var(--change)" stroke-dasharray="4 4"/>`;
+
+  const ids = lastMatchIds;
+  const ordered = [...SONGS].sort((a, b) => (ids.has(a.id) - ids.has(b.id)));
+  ordered.forEach(s => {
+    const cx = x(norm(s, xKey)), cy = y(norm(s, yKey)), m = ids.has(s.id);
+    g += `<circle class="pt" data-id="${s.id}" cx="${cx}" cy="${cy}" r="${m ? 5 : 3}" fill="${m ? "var(--match)" : "var(--dot-bg)"}" ${m ? 'stroke="var(--surface-1)" stroke-width="1.5"' : 'fill-opacity="0.7"'}/>`;
+  });
+  if (state.hoverId != null) {
+    const s = SONGS[state.hoverId];
+    g += `<circle cx="${x(norm(s, xKey))}" cy="${y(norm(s, yKey))}" r="10" fill="none" stroke="var(--text-primary)" stroke-width="2"/>`;
+  }
+  if (state.baseline) {
+    const s = state.baseline, bx = x(norm(s, xKey)), by = y(norm(s, yKey));
+    g += `<circle cx="${bx}" cy="${by}" r="9" fill="none" stroke="var(--baseline)" stroke-width="2.5"/>`;
+    g += `<text x="${bx + 13}" y="${by + 4}" font-size="12" font-weight="600" fill="var(--text-primary)" paint-order="stroke" stroke="var(--surface-1)" stroke-width="3">${s.title}</text>`;
+  }
+  // invisible larger hit targets
+  SONGS.forEach(s => g += `<circle class="hit" data-id="${s.id}" cx="${x(norm(s, xKey))}" cy="${y(norm(s, yKey))}" r="6" fill="transparent" style="cursor:pointer"/>`);
+  const svg = $("scatter"); svg.innerHTML = g;
+  svg.querySelectorAll(".hit").forEach(c => {
+    c.onmousemove = e => showTip(e, SONGS[+c.dataset.id]);
+    c.onmouseleave = hideTip;
+    c.onclick = () => setBaseline(SONGS[+c.dataset.id]);
+  });
+}
+function showTip(e, s) {
+  const t = $("tip");
+  t.innerHTML = `<b>${s.title}</b><span class="muted">${s.artist} · ${s.year} · ${s.genre}</span><br>` +
+    ATTRS.map(a => `${a.label}: ${s[a.key]}`).join("<br>") + `<br>Popularity: ${s.pop}` +
+    `<br><span class="muted">Click to use as baseline</span>`;
+  t.style.display = "block";
+  const w = t.offsetWidth;
+  t.style.left = Math.min(window.innerWidth - w - 8, e.clientX + 14) + "px";
+  t.style.top = (e.clientY + 14) + "px";
+}
+function hideTip() { $("tip").style.display = "none"; }
+
+// ---------------------------------------------------------------- spider chart (step ③)
+function renderRadar() {
+  const svg = $("radar"), chosen = [...state.chosen.keys()].map(id => SONGS[id]);
+  const has = chosen.length > 0;
+  $("radarEmpty").style.display = has ? "none" : "block";   // step ③ fail state
+  svg.style.display = has ? "block" : "none";
+  $("radarLegend").style.display = has ? "flex" : "none";
+  $("radarTableWrap").style.display = has ? "block" : "none";
+  if (!has) return;
+  markStep("spider");
+
+  const cx = 180, cy = 162, R = 100, n = ATTRS.length;
+  const ang = i => -Math.PI / 2 + i * 2 * Math.PI / n;
+  const pt = (i, v) => [cx + Math.cos(ang(i)) * R * v / 100, cy + Math.sin(ang(i)) * R * v / 100];
+  const poly = vals => vals.map((v, i) => pt(i, v).join(",")).join(" ");
+  let g = "";
+  [25, 50, 75, 100].forEach(r => g += `<polygon points="${poly(ATTRS.map(() => r))}" fill="none" stroke="var(--grid)"/>`);
+  ATTRS.forEach((a, i) => {
+    const [ex, ey] = pt(i, 100), [lx, ly] = pt(i, 128);
+    g += `<line x1="${cx}" y1="${cy}" x2="${ex}" y2="${ey}" stroke="var(--grid)"/>`;
+    const anchor = Math.abs(lx - cx) < 8 ? "middle" : lx > cx ? "start" : "end";
+    g += `<text x="${lx}" y="${ly + 4}" font-size="12" fill="var(--text-secondary)" text-anchor="${anchor}">${a.short || a.label}</text>`;
+  });
+  const avg = ATTRS.map(a => chosen.reduce((t, s) => t + norm(s, a.key), 0) / chosen.length);
+  const series = [];
+  series.push({ vals: avg, color: "var(--match)", fill: 0.2 });
+  if (state.baseline) series.push({ vals: ATTRS.map(a => norm(state.baseline, a.key)), color: "var(--baseline)", fill: 0, dash: "5 4", dots: false });
+  series.push({ vals: ATTRS.map(a => state.target[a.key]), color: "var(--change)", fill: 0, dots: false });
+  const hov = state.hoverId != null ? SONGS[state.hoverId] : null;
+  if (hov) series.push({ vals: ATTRS.map(a => norm(hov, a.key)), color: "var(--text-secondary)", fill: 0.06, dots: false });
+  series.forEach(sr => {
+    g += `<polygon points="${poly(sr.vals)}" fill="${sr.color}" fill-opacity="${sr.fill}" stroke="${sr.color}" stroke-width="2" ${sr.dash ? `stroke-dasharray="${sr.dash}"` : ""} stroke-linejoin="round"/>`;
+    if (sr.dots !== false) sr.vals.forEach((v, i) => { const [x, y] = pt(i, v); g += `<circle cx="${x}" cy="${y}" r="4" fill="${sr.color}" stroke="var(--surface-1)" stroke-width="2"/>`; });
+  });
+  // direct value labels on the profile only
+  avg.forEach((v, i) => {
+    const [x, y] = pt(i, Math.min(Math.max(v, 18) + 12, 110));
+    g += `<text x="${x}" y="${y + 4}" font-size="11" font-weight="600" text-anchor="middle" fill="var(--text-primary)" paint-order="stroke" stroke="var(--surface-1)" stroke-width="3">${Math.round(v)}</text>`;
+  });
+  svg.innerHTML = g;
+  $("lgBaseline").style.display = state.baseline ? "inline-flex" : "none";
+  $("lgHover").style.display = hov ? "inline-flex" : "none";
+  if (hov) $("lgHoverName").textContent = hov.title;
+
+  $("radarTable").innerHTML = `<table><tr><th>Attribute</th><th>Your profile</th>${state.baseline ? "<th>Baseline</th>" : ""}</tr>` +
+    ATTRS.map((a, i) => `<tr><td>${a.label}</td><td>${a.fmt(avg[i])}</td>${state.baseline ? `<td>${a.fmt(norm(state.baseline, a.key))}</td>` : ""}</tr>`).join("") + "</table>";
+}
+function renderProfile() { renderChosenList([...state.chosen.keys()].map(id => SONGS[id])); renderRadar(); }
+function renderChosenList(chosen) {
+  $("chosen").innerHTML = chosen.length ? `<p class="sub" style="margin:6px 0 4px">${chosen.length} song${chosen.length > 1 ? "s" : ""} in profile</p>` +
+    chosen.map(s => `<div class="chip-row" data-id="${s.id}"><span>${s.title} <small>· ${s.artist}</small><span class="tag">${state.chosen.get(s.id)}</span></span><button class="ghost" data-rm="${s.id}" aria-label="Remove ${s.title}">✕</button></div>`).join("") : "";
+  $("chosen").querySelectorAll("[data-rm]").forEach(b => b.onclick = () => { state.chosen.delete(+b.dataset.rm); renderResults(); renderProfile(); });
+  $("chosen").querySelectorAll(".chip-row").forEach(r => {
+    r.onmouseenter = () => { state.hoverId = +r.dataset.id; renderRadar(); renderScatter(); };
+    r.onmouseleave = () => { state.hoverId = null; renderRadar(); renderScatter(); };
+  });
+}
+
+// ---------------------------------------------------------------- boot
+buildSliders(); initAxes(); syncSliders(); update(); renderProfile();
+</script>
+</body>
+</html>
