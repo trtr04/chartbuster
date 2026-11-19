@@ -8,6 +8,12 @@ You search for a song you like, adjust its attributes, get song recommendations,
 
 ---
 
+## Live demo
+
+**https://trtr04.github.io/chartbuster/** (hosted on GitHub Pages from the `main` branch)
+
+---
+
 ## Quick start
 
 The page loads its data from a separate file, so serve the folder rather than double-clicking the HTML:
@@ -83,6 +89,7 @@ The raw CSV is not committed (see `.gitignore`).
 
 ```
 .
+├── index.html                 # Redirects to style-explorer.html (GitHub Pages entry)
 ├── style-explorer.html        # The whole app: HTML, CSS and JS
 ├── data/
 │   ├── spotify_songs.js       # Trimmed dataset (window.SONG_DATA)
