@@ -26,16 +26,19 @@ Any static server works (`npx serve`, VS Code Live Server, and so on).
 
 ## How to use it
 
+The page reads top to bottom: **search → explore (sliders + song map) → recommendations → your style profile**. At first only the search bar shows; the rest appears once you pick a song (or click *"or start exploring without a song"*).
+
 | Step | What you do | Success | Failure |
 |---|---|---|---|
 | **① Search for a song** | Type in the search box (it autocompletes), e.g. *"All I Want for Christmas"*. | Sliders animate to that song's values and the song is ringed on the song map. | A **"Song not found"** screen suggests similar titles, or lets you skip and use the sliders directly. |
-| **② Tune the attributes** | Drag the vertical sliders (or use the arrow keys / PageUp / PageDown). Uncheck an attribute to ignore it. Adjust **match tolerance**. | **Our recommendations** lists ranked matches (1, 2, 3, …) and the matches light up on the song map. | **"No songs match"**: the previous results stay in place, greyed out, with buttons to widen the tolerance or jump to the closest song. |
-| **③ Build your spider chart** | Tick **Add to chart** on any recommendation, or press ▶ to play it (played songs are added automatically). | The spider chart shows the average of your chosen songs. | Before any song is added, an empty state explains what to do. |
+| **② Tune the attributes** | Drag the vertical sliders (or use the arrow keys / PageUp / PageDown). Uncheck an attribute to ignore it. Adjust **match tolerance** under *Advanced*. | **Our recommendations** lists ranked matches (1, 2, 3, …) and the matches light up on the song map. | **"No songs match"**: the previous results stay in place, greyed out, with buttons to widen the tolerance or jump to the closest song. |
+| **③ Build your spider chart** | Tick **Add to chart** on any recommendation, or press ▶ to play it (played songs are added automatically). | The spider chart shows the average of your chosen songs, plus a **genre breakdown** (e.g. *"67% are Pop, 17% Rock and 17% Rap"*) and **More for you, across genres**: one recommendation per genre matched to your profile, with genres you haven't tried marked *new for you*. | Before any song is added, an empty state explains what to do. |
 
 Other interactions:
 
 - **Song map** (scatter plot of all 900 songs): hover a dot for details, click a dot to use that song as your baseline, and switch either axis with the X / Y dropdowns.
-- **▶ Play** opens Spotify's embedded player for the track (a preview, or the full song if you are logged in to Spotify).
+- **▶ Play** opens Spotify's embedded player in a dock at the bottom-right (a preview, or the full song if you are logged in to Spotify).
+- **Dark / Light** button (top-right) switches the theme and remembers your choice; by default the page follows your system setting.
 - **Reset to song** returns every slider to the searched song's values.
 - Hover a song in the recommendations or profile list to overlay it on the spider chart.
 - A "Show as table" option under the spider chart lists the same values in a table.

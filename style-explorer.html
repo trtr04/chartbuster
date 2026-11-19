@@ -4,6 +4,10 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Chart Busters · Music Style Explorer (prototype)</title>
+<script>
+  // apply the saved theme before first paint (no flash)
+  try { const t = localStorage.getItem("cb-theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}
+</script>
 <style>
   :root {
     color-scheme: light;
@@ -13,7 +17,7 @@
     --border: #e2e0d8;
     --text-primary: #0b0b0b;
     --text-secondary: #52514e;
-    --text-muted: #85837c;
+    --text-muted: #66645e;   /* ≥5:1 on every light surface */
     --grid: #e6e4dd;
     --dot-bg: #c9c7bf;
     --series-1: #2a78d6; /* taste profile / matches */
@@ -25,11 +29,16 @@
     --warn-bg: #fff4dc;
     --warn-ink: #7a5200;
     --radius: 12px;
+    /* type scale: title / section / body / small (nothing below 13px) */
+    --fs-title: clamp(32px, 4.5vw, 44px);
+    --fs-section: 22px;
+    --fs-body: 16px;
+    --fs-small: 14px;
   }
   /* roles: blue = the searched song's value, orange = what you changed, aqua = recommendations / your chart */
   :root { --baseline: var(--series-1); --change: var(--series-2); --match: var(--series-3); }
   @media (prefers-color-scheme: dark) {
-    :root {
+    :root:not([data-theme="light"]) {
       color-scheme: dark;
       --bg: #121211;
       --surface-1: #1a1a19;
@@ -37,7 +46,7 @@
       --border: #33332f;
       --text-primary: #f0efec;
       --text-secondary: #c3c2b7;
-      --text-muted: #8f8d84;
+      --text-muted: #a3a196; /* ≥6:1 on every dark surface */
       --grid: #2e2e2b;
       --dot-bg: #4a4945;
       --series-1: #3987e5;
@@ -50,40 +59,125 @@
       --warn-ink: #f2cf7d;
     }
   }
+  :root[data-theme="dark"] {
+      color-scheme: dark;
+      --bg: #121211;
+      --surface-1: #1a1a19;
+      --surface-2: #242422;
+      --border: #33332f;
+      --text-primary: #f0efec;
+      --text-secondary: #c3c2b7;
+      --text-muted: #a3a196; /* ≥6:1 on every dark surface */
+      --grid: #2e2e2b;
+      --dot-bg: #4a4945;
+      --series-1: #3987e5;
+      --series-2: #d95926;
+      --series-3: #199e70;
+      --accent: #e8e7e2; --accent-ink: #1a1a19;
+      --critical: #e66767;
+      --critical-bg: #3a1f1e;
+      --warn-bg: #3a2f14;
+      --warn-ink: #f2cf7d;
+  }
   * { box-sizing: border-box; }
   body {
     margin: 0; background: var(--bg); color: var(--text-primary);
-    font: 14px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, sans-serif;
+    font: var(--fs-body)/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, sans-serif;
   }
-  header {
-    display: flex; align-items: baseline; gap: 16px; flex-wrap: wrap;
-    padding: 20px 28px 8px;
-  }
-  header h1 { font-size: 20px; margin: 0; letter-spacing: -0.01em; }
-  header p { margin: 0; color: var(--text-secondary); }
-  .steps { display: flex; gap: 8px; padding: 0 28px 16px; flex-wrap: wrap; }
-  .step-chip {
-    font-size: 12px; padding: 4px 10px; border-radius: 999px;
-    background: var(--surface-2); color: var(--text-secondary); border: 1px solid var(--border);
-  }
-  .step-chip.done { background: var(--accent); color: var(--accent-ink); border-color: transparent; }
-  .step-chip.done::before { content: "✓ "; }
+  .page { max-width: 1240px; margin: 0 auto; padding: 0 28px 28px; }
 
-  main {
-    display: grid; gap: 16px; padding: 0 28px 28px;
-    grid-template-columns: 340px minmax(0, 1fr) 360px;
-    align-items: start;
-  }
-  @media (max-width: 1200px) { main { grid-template-columns: 340px minmax(0, 1fr); } .col-3 { grid-column: 1 / -1; } }
-  @media (max-width: 780px) { main { grid-template-columns: 1fr; } }
+  /* Hero: search first */
+  .hero { text-align: center; padding: 40px 0 28px; }
+  .brand { font-size: var(--fs-small); font-weight: 600; color: var(--text-muted); margin: 0 0 8px; }
+  .hero h1 { font-size: var(--fs-title); line-height: 1.15; margin: 0 0 18px; letter-spacing: -0.02em; }
+  .hero .search-row { width: 100%; max-width: 640px; margin: 0 auto; }
+  .hero input[type="search"] { font-size: 18px; padding: 16px 20px; border-radius: 12px; }
+  .hero .search-row button.primary { font-size: var(--fs-body); padding: 0 22px; border-radius: 12px; }
+  .hero .suggest { top: 56px; text-align: left; }
+  .hero .baseline-pill { width: 100%; max-width: 640px; margin: 12px auto 0; text-align: left; }
+  .intro { max-width: 600px; margin: 16px auto 0; color: var(--text-secondary); font-size: 18px; }
+  .guide { display: flex; justify-content: center; flex-wrap: wrap; gap: 6px 4px; margin: 20px auto 0; padding: 0; list-style: none; font-size: var(--fs-small); color: var(--text-secondary); }
+  .guide li { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px 4px 4px; border-radius: 999px; }
+  .guide li + li::before { content: "→"; color: var(--text-muted); margin: 0 6px 0 -4px; }
+  @media (max-width: 560px) { .guide li + li::before { display: none; } }
+  .guide li .n { display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; border: 1.5px solid var(--text-muted); font-size: 13px; font-weight: 700; }
+  .guide li.done { color: var(--text-primary); font-weight: 600; }
+  .guide li.done .n { background: var(--accent); color: var(--accent-ink); border-color: transparent; }
+  .guide li.done .n span { display: none; }
+  .guide li.done .n::after { content: "✓"; }
+  .skip { margin-top: 14px; background: none; border: none; color: var(--text-secondary); text-decoration: underline; text-underline-offset: 3px; font-size: var(--fs-small); }
+
+  /* Theme switch */
+  .theme-toggle { position: absolute; top: 16px; right: 0; z-index: 2; display: inline-flex; align-items: center; gap: 8px; border-radius: 999px; padding: 6px 14px; font-size: var(--fs-small); background: var(--surface-1); }
+  .theme-toggle .ico { font-size: 16px; line-height: 1; }
+
+  /* Music staff decoration behind the hero */
+  .hero { position: relative; }
+  .hero > *:not(.staff):not(.theme-toggle) { position: relative; z-index: 1; }
+  .hero > .search-row:not(.staff):not(.theme-toggle) { z-index: 10; }  /* keep the suggestion list above the text below it */
+  .staff { position: absolute; left: 50%; top: 50%; width: min(1100px, 100vw); transform: translate(-50%, -58%); height: 260px; pointer-events: none; color: var(--text-muted); opacity: 0.16; z-index: 0; }
+  .staff text { font-family: "Apple Symbols", "Segoe UI Symbol", "Noto Music", serif; }
+  .clef { font-family: "Apple Symbols", "Segoe UI Symbol", "Noto Music", serif; font-size: 1.15em; margin-right: 4px; }
+
+  /* Now-playing dock: reachable from anywhere on the page */
+  .player { position: fixed; right: 16px; bottom: 16px; width: min(400px, calc(100vw - 32px)); z-index: 90; margin: 0 !important; background: var(--surface-1); border: 1px solid var(--border); border-radius: 14px; padding: 8px 10px 10px; box-shadow: 0 12px 32px rgba(0,0,0,.22); }
+  body.has-player .toast { bottom: 140px; }
+  body.has-player .page { padding-bottom: 140px; }
+
+  /* Genre breakdown */
+  .genres { margin-bottom: 18px; }
+  .genre-summary { font-size: var(--fs-body); margin: 0 0 10px; }
+  .gbar { display: grid; grid-template-columns: 56px minmax(0, 1fr) 44px; gap: 10px; align-items: center; font-size: var(--fs-small); margin: 6px 0; }
+  .gbar .track { height: 10px; border-radius: 5px; background: var(--grid); overflow: hidden; }
+  .gbar .fill { height: 100%; background: var(--match); border-radius: 0 4px 4px 0; }
+  .gbar .pct { text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; }
+
+  /* Profile-based recommendations by genre */
+  .more { margin-top: 26px; padding-top: 20px; border-top: 1px solid var(--border); }
+  .more h3 { font-size: var(--fs-body); margin: 0 0 2px; }
+  .more > p { margin: 0 0 14px; color: var(--text-secondary); font-size: var(--fs-small); }
+  .gcards { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 16px; }
+  .gcard { min-width: 0; }
+  .gcard .cover { position: relative; aspect-ratio: 1; border-radius: 10px; background: var(--surface-2) center/cover; overflow: hidden; }
+  .gcard .cover button.play { position: absolute; right: 8px; bottom: 8px; width: 40px; height: 40px; box-shadow: 0 2px 8px rgba(0,0,0,.35); }
+  .gcard .cover button.play.playing { background: var(--match); color: #fff; }
+  .gtag { display: inline-block; font-size: 13px; font-weight: 600; padding: 1px 8px; border-radius: 999px; background: var(--surface-2); border: 1px solid var(--border); margin: 8px 0 4px; }
+  .gtag.new { border-style: dashed; }
+  .gcard .title { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .gcard .meta { color: var(--text-secondary); font-size: var(--fs-small); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .gcard .row { display: flex; justify-content: space-between; align-items: center; gap: 6px; margin-top: 6px; font-size: var(--fs-small); color: var(--text-secondary); }
+  .gcard .row button { font-size: var(--fs-small); padding: 3px 10px; }
+
+  /* Progressive reveal: only the search shows until a song is picked */
+  body.locked main { display: none; }
+  body.locked .hero { min-height: 82vh; display: flex; flex-direction: column; justify-content: center; }
+  body:not(.locked) .skip { display: none; }
+
+  /* Advanced (tolerance) */
+  details.advanced { margin-top: 14px; padding-top: 10px; border-top: 1px dashed var(--border); font-size: var(--fs-small); }
+  details.advanced summary { cursor: pointer; color: var(--text-secondary); }
+  details.advanced .tolerance { border-top: none; margin-top: 8px; padding-top: 0; }
+
+  /* Sections stack vertically */
+  .section-title { display: flex; align-items: baseline; gap: 10px; margin: 28px 0 10px; }
+  .section-title h2 { font-size: var(--fs-section); margin: 0; letter-spacing: -0.01em; }
+  .section-title p { margin: 0; color: var(--text-secondary); font-size: var(--fs-body); }
+  .explore { display: grid; grid-template-columns: 380px minmax(0, 1fr); gap: 16px; align-items: stretch; }
+  .explore > .card { margin-bottom: 0; }
+  @media (max-width: 860px) { .explore { grid-template-columns: 1fr; } }
+  .results { display: grid; grid-template-columns: repeat(auto-fill, minmax(440px, 1fr)); column-gap: 20px; }
+  @media (max-width: 560px) { .results { grid-template-columns: 1fr; } }
+  .profile { display: grid; grid-template-columns: minmax(0, 520px) minmax(0, 1fr); gap: 24px; align-items: start; }
+  @media (max-width: 860px) { .profile { grid-template-columns: 1fr; } }
+  .chosen { max-height: 360px !important; }
 
   .card {
     background: var(--surface-1); border: 1px solid var(--border);
     border-radius: var(--radius); padding: 16px 18px; margin-bottom: 16px;
   }
-  .card h2 { font-size: 13px; margin: 0 0 2px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-secondary); }
-  .card .sub { color: var(--text-muted); font-size: 12px; margin: 0 0 12px; }
-  .num { display: inline-block; width: 18px; height: 18px; border-radius: 50%; border: 1.5px solid currentColor; text-align: center; font-size: 11px; line-height: 15px; margin-right: 6px; }
+  .card h2 { font-size: var(--fs-body); font-weight: 700; margin: 0 0 4px; color: var(--text-primary); }
+  .card .sub { color: var(--text-secondary); font-size: var(--fs-small); margin: 0 0 12px; }
+  .num { display: inline-block; width: 18px; height: 18px; border-radius: 50%; border: 1.5px solid currentColor; text-align: center; font-size: var(--fs-small); line-height: 15px; margin-right: 6px; }
 
   /* Search */
   .search-row { display: flex; gap: 8px; position: relative; }
@@ -110,24 +204,24 @@
   .suggest small { color: var(--text-muted); }
   .baseline-pill {
     margin-top: 10px; display: none; align-items: center; gap: 8px;
-    padding: 8px 10px; border-radius: 8px; background: var(--surface-2); font-size: 13px;
+    padding: 8px 10px; border-radius: 8px; background: var(--surface-2); font-size: var(--fs-small);
   }
   .baseline-pill .swatch { width: 10px; height: 10px; border-radius: 2px; background: var(--baseline); flex: none; }
-  .baseline-pill button { margin-left: auto; padding: 2px 8px; font-size: 12px; }
+  .baseline-pill button { margin-left: auto; padding: 2px 8px; font-size: var(--fs-small); }
 
   /* Vertical slider bank */
-  .vlegend { display: flex; gap: 14px; font-size: 12px; color: var(--text-secondary); margin-bottom: 10px; flex-wrap: wrap; }
+  .vlegend { display: flex; gap: 14px; font-size: var(--fs-small); color: var(--text-secondary); margin-bottom: 10px; flex-wrap: wrap; }
   .vlegend span { display: inline-flex; align-items: center; gap: 6px; }
   .sq { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
   .vbank { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; }
   .vcol { display: flex; flex-direction: column; align-items: center; gap: 4px; min-width: 0; }
   .vcol.off .vtrack, .vcol.off .vval { opacity: 0.35; }
   .vcol input[type="checkbox"] { accent-color: var(--accent); margin: 0; }
-  .vval { font-size: 12px; font-variant-numeric: tabular-nums; height: 32px; text-align: center; line-height: 1.3; color: var(--text-secondary); }
-  .vval .from { color: var(--text-muted); text-decoration: line-through; font-size: 11px; display: block; }
+  .vval { font-size: var(--fs-body); font-variant-numeric: tabular-nums; height: 42px; text-align: center; line-height: 1.3; color: var(--text-secondary); }
+  .vval .from { color: var(--text-muted); text-decoration: line-through; font-size: 13px; display: block; }
   .vval .to { color: var(--text-primary); font-weight: 700; }
   .vval .to.changed { color: var(--change); filter: brightness(0.85); }
-  .vend { font-size: 10px; color: var(--text-muted); text-align: center; white-space: nowrap; }
+  .vend { font-size: var(--fs-small); color: var(--text-muted); text-align: center; white-space: nowrap; }
   .vtrack {
     position: relative; width: 44px; height: 170px; cursor: ns-resize; touch-action: none; border-radius: 8px;
   }
@@ -141,35 +235,35 @@
   .vtrack .mk.handle { background: var(--change); z-index: 2; }
   .vtrack .mk.handle.same { background: var(--baseline); }
   .vtrack.dragging .mk.handle { transform: scale(1.12); }
-  .vname { font-weight: 600; font-size: 12px; text-align: center; line-height: 1.2; }
+  .vname { font-weight: 600; font-size: var(--fs-small); margin-top: 4px; text-align: center; line-height: 1.2; }
   .vname svg { display: block; margin: 0 auto 2px; }
-  .reset-row { display: flex; justify-content: space-between; align-items: center; margin-top: 10px; font-size: 12px; color: var(--text-muted); gap: 8px; }
-  .reset-row button { font-size: 12px; padding: 4px 10px; }
+  .reset-row { display: flex; justify-content: space-between; align-items: center; margin-top: 10px; font-size: var(--fs-small); color: var(--text-muted); gap: 8px; }
+  .reset-row button { font-size: var(--fs-small); padding: 4px 10px; }
   input[type="range"] { width: 100%; accent-color: var(--accent); margin: 6px 0 2px; }
-  .tolerance { display: flex; align-items: center; gap: 10px; margin-top: 14px; padding-top: 12px; border-top: 1px dashed var(--border); font-size: 13px; color: var(--text-secondary); }
+  .tolerance { display: flex; align-items: center; gap: 10px; margin-top: 14px; padding-top: 12px; border-top: 1px dashed var(--border); font-size: var(--fs-small); color: var(--text-secondary); }
   .tolerance input { flex: 1; }
 
   /* Scatter */
   .viz-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; }
-  .legend { display: flex; gap: 14px; font-size: 12px; color: var(--text-secondary); flex-wrap: wrap; }
+  .legend { display: flex; gap: 14px; font-size: var(--fs-small); color: var(--text-secondary); flex-wrap: wrap; }
   .legend span { display: inline-flex; align-items: center; gap: 6px; }
   .legend i { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
-  .axis-select { font-size: 12px; color: var(--text-secondary); display: flex; gap: 8px; align-items: center; }
+  .axis-select { font-size: var(--fs-small); color: var(--text-secondary); display: flex; gap: 8px; align-items: center; }
   select { font: inherit; padding: 4px 6px; border-radius: 6px; border: 1px solid var(--border); background: var(--surface-2); color: var(--text-primary); }
   #scatter { width: 100%; height: auto; display: block; }
   .tooltip {
     position: fixed; pointer-events: none; z-index: 50; display: none;
     background: var(--surface-1); color: var(--text-primary); border: 1px solid var(--border);
-    border-radius: 8px; padding: 8px 10px; font-size: 12px; box-shadow: 0 6px 18px rgba(0,0,0,.15); max-width: 240px;
+    border-radius: 8px; padding: 8px 10px; font-size: var(--fs-small); box-shadow: 0 6px 18px rgba(0,0,0,.15); max-width: 240px;
   }
-  .tooltip b { display: block; font-size: 13px; }
+  .tooltip b { display: block; font-size: var(--fs-small); }
   .tooltip .muted { color: var(--text-muted); }
 
   /* Results */
-  .banner { display: none; padding: 10px 12px; border-radius: 8px; margin-bottom: 12px; font-size: 13px; }
+  .banner { display: none; padding: 10px 12px; border-radius: 8px; margin-bottom: 12px; font-size: var(--fs-small); }
   .banner.warn { display: block; background: var(--warn-bg); color: var(--warn-ink); }
   .banner b { display: block; }
-  .banner button { margin-top: 8px; margin-right: 6px; font-size: 12px; padding: 4px 10px; }
+  .banner button { margin-top: 8px; margin-right: 6px; font-size: var(--fs-small); padding: 4px 10px; }
   .results.stale { opacity: 0.45; filter: grayscale(0.6); pointer-events: none; }
   .song {
     display: grid; grid-template-columns: 30px 40px minmax(0, 1fr) auto; gap: 10px; align-items: center;
@@ -179,38 +273,38 @@
   .song:hover { background: var(--surface-2); }
   .play {
     width: 36px; height: 36px; border-radius: 50%; padding: 0; display: grid; place-items: center;
-    background: var(--accent); color: var(--accent-ink); border: none; font-size: 13px;
+    background: var(--accent); color: var(--accent-ink); border: none; font-size: var(--fs-small);
   }
   .play.art { background-size: cover; background-position: center; color: #fff; text-shadow: 0 1px 3px rgba(0,0,0,.6); border-radius: 6px; width: 40px; height: 40px; box-shadow: inset 0 0 0 40px rgba(0,0,0,.25); }
   .play.art:hover { box-shadow: inset 0 0 0 40px rgba(0,0,0,.45); }
   .play.playing { outline: 3px solid var(--match); outline-offset: 1px; }
-  .player { display: none; margin-bottom: 12px; }
+  .player { display: none; }
   .player.show { display: block; }
-  .player-head { display: flex; justify-content: space-between; align-items: center; font-size: 12px; color: var(--text-muted); margin-bottom: 4px; }
+  .player-head { display: flex; justify-content: space-between; align-items: center; font-size: var(--fs-small); color: var(--text-muted); margin-bottom: 4px; }
   .player-head a { color: var(--text-secondary); }
   .player iframe { width: 100%; height: 80px; border: 0; border-radius: 12px; display: block; }
   .song .title { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .song .meta { color: var(--text-muted); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .match { font-size: 11px; color: var(--text-secondary); font-variant-numeric: tabular-nums; text-align: right; }
-  .rank { width: 28px; height: 28px; border: 2px solid var(--text-primary); border-radius: 6px; display: grid; place-items: center; font-weight: 700; font-size: 14px; font-variant-numeric: tabular-nums; }
-  .addchk { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; margin-top: 4px; cursor: pointer; color: var(--text-secondary); white-space: nowrap; }
+  .song .meta { color: var(--text-secondary); font-size: var(--fs-small); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .match { font-size: var(--fs-small); color: var(--text-secondary); font-variant-numeric: tabular-nums; text-align: right; }
+  .rank { width: 28px; height: 28px; border: 2px solid var(--text-primary); border-radius: 6px; display: grid; place-items: center; font-weight: 700; font-size: var(--fs-body); font-variant-numeric: tabular-nums; }
+  .addchk { display: inline-flex; align-items: center; gap: 6px; font-size: var(--fs-small); margin-top: 4px; cursor: pointer; color: var(--text-secondary); white-space: nowrap; }
   .addchk input { accent-color: var(--match); width: 16px; height: 16px; margin: 0; cursor: pointer; }
   .addchk.on { color: var(--text-primary); font-weight: 600; }
   .count { color: var(--text-muted); font-weight: 400; text-transform: none; letter-spacing: 0; }
 
   /* Spider */
   .empty {
-    text-align: center; color: var(--text-muted); padding: 28px 12px; border: 1.5px dashed var(--border); border-radius: 10px; font-size: 13px;
+    text-align: center; color: var(--text-muted); padding: 28px 12px; border: 1.5px dashed var(--border); border-radius: 10px; font-size: var(--fs-small);
   }
-  .empty b { display: block; color: var(--text-secondary); margin-bottom: 4px; font-size: 14px; }
-  #radar { width: 100%; height: auto; display: none; }
+  .empty b { display: block; color: var(--text-secondary); margin-bottom: 4px; font-size: var(--fs-body); }
+  #radar { width: 100%; max-width: 460px; height: auto; display: none; margin: 0 auto; }
   .chosen { margin-top: 10px; max-height: 260px; overflow: auto; }
-  .chip-row { display: flex; justify-content: space-between; align-items: center; padding: 6px 8px; border-radius: 6px; font-size: 13px; cursor: default; }
+  .chip-row { display: flex; justify-content: space-between; align-items: center; padding: 6px 8px; border-radius: 6px; font-size: var(--fs-small); cursor: default; }
   .chip-row:hover { background: var(--surface-2); }
   .chip-row small { color: var(--text-muted); }
-  .chip-row button { padding: 0 8px; font-size: 12px; }
-  .tag { font-size: 10px; padding: 1px 6px; border-radius: 999px; background: var(--surface-2); color: var(--text-secondary); margin-left: 6px; border: 1px solid var(--border); }
-  details { margin-top: 10px; font-size: 12px; color: var(--text-secondary); }
+  .chip-row button { padding: 0 8px; font-size: var(--fs-small); }
+  .tag { font-size: 13px; padding: 0 6px; border-radius: 999px; background: var(--surface-2); color: var(--text-secondary); margin-left: 6px; border: 1px solid var(--border); }
+  details { margin-top: 10px; font-size: var(--fs-small); color: var(--text-secondary); }
   table { border-collapse: collapse; width: 100%; margin-top: 6px; font-variant-numeric: tabular-nums; }
   th, td { text-align: left; padding: 4px 6px; border-bottom: 1px solid var(--border); }
 
@@ -226,50 +320,64 @@
   .modal .icon { width: 40px; height: 40px; border-radius: 50%; background: var(--critical-bg); color: var(--critical); display: grid; place-items: center; font-weight: 700; font-size: 20px; margin-bottom: 12px; }
   .modal h3 { margin: 0 0 6px; font-size: 18px; }
   .modal p { margin: 0 0 14px; color: var(--text-secondary); }
-  .modal .sugg button { margin: 0 6px 6px 0; font-size: 13px; }
+  .modal .sugg button { margin: 0 6px 6px 0; font-size: var(--fs-small); }
   .modal .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; }
   .toast {
     position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: var(--text-primary); color: var(--surface-1);
-    padding: 8px 14px; border-radius: 8px; font-size: 13px; opacity: 0; transition: opacity .2s; pointer-events: none; z-index: 120;
+    padding: 8px 14px; border-radius: 8px; font-size: var(--fs-small); opacity: 0; transition: opacity .2s; pointer-events: none; z-index: 120;
   }
   .toast.show { opacity: 1; }
-  .note { font-size: 11px; color: var(--text-muted); padding: 0 28px 24px; }
+  .note { font-size: var(--fs-small); color: var(--text-muted); padding: 8px 0 24px; }
 </style>
 </head>
-<body>
+<body class="locked">
 
-<header>
-  <h1>Music Style Explorer</h1>
-  <p>Find music by its attributes, then see your taste as a spider chart.</p>
+<div class="page">
+
+<!-- ============ 1. Search first ============ -->
+<header class="hero">
+  <button class="theme-toggle" id="themeToggle" aria-label="Switch to dark mode"><span class="ico" id="themeIco">☾</span><span id="themeLbl">Dark</span></button>
+  <svg class="staff" viewBox="0 0 1100 260" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+    <g stroke="currentColor" stroke-width="1.5">
+      <line x1="0" x2="1100" y1="90" y2="90"/><line x1="0" x2="1100" y1="110" y2="110"/><line x1="0" x2="1100" y1="130" y2="130"/><line x1="0" x2="1100" y1="150" y2="150"/><line x1="0" x2="1100" y1="170" y2="170"/>
+    </g>
+    <g fill="currentColor">
+      <text x="20" y="176" font-size="120">𝄞</text>
+      <text x="150" y="150" font-size="56">♩</text>
+      <text x="250" y="132" font-size="56">♪</text>
+      <text x="840" y="140" font-size="64">♫</text>
+      <text x="950" y="160" font-size="56">♬</text>
+      <text x="1040" y="122" font-size="56">♩</text>
+    </g>
+  </svg>
+  <p class="brand"><span class="clef" aria-hidden="true">𝄞</span>Chart Busters · Music Style Explorer</p>
+  <h1>What's your favorite song?</h1>
+  <div class="search-row">
+    <input type="search" id="search" placeholder="🔍  Song or artist, e.g. Blinding Lights" autocomplete="off" aria-label="What's your favorite song?" />
+    <button class="primary" id="searchBtn">Search</button>
+    <div class="suggest" id="suggest" role="listbox"></div>
+  </div>
+  <div class="baseline-pill" id="baselinePill">
+    <span class="swatch"></span><span id="baselineText"></span>
+    <button class="ghost" id="clearBaseline">Clear</button>
+  </div>
+  <p class="intro">Search a song you love, tweak how it sounds, and see what your taste looks like.</p>
+  <ol class="guide" id="steps">
+    <li data-step="search"><span class="n"><span>1</span></span>Search a song</li>
+    <li data-step="adjust"><span class="n"><span>2</span></span>Adjust the sliders</li>
+    <li data-step="listen"><span class="n"><span>3</span></span>Play &amp; add songs</li>
+    <li data-step="spider"><span class="n"><span>4</span></span>See your profile</li>
+  </ol>
+  <button class="skip" id="skipBtn">or start exploring without a song</button>
 </header>
-<div class="steps" id="steps">
-  <span class="step-chip" data-step="mood">Pick a mood</span>
-  <span class="step-chip" data-step="search">① Set a baseline song</span>
-  <span class="step-chip" data-step="adjust">② Adjust attributes</span>
-  <span class="step-chip" data-step="listen">Listen to matches</span>
-  <span class="step-chip" data-step="spider">③ Generate spider chart</span>
-</div>
 
 <main>
-  <!-- ============ Column 1: controls ============ -->
-  <section class="col-1">
+  <!-- ============ 2. Sliders + visualization ============ -->
+  <div class="section-title" id="exploreTitle"><h2>Explore</h2><p>Move the sliders to find similar songs.</p></div>
+  <section class="explore">
     <div class="card">
-      <h2><span class="num">1</span>Search for a song</h2>
-      <p class="sub">Pick a song you like — the sliders jump to its attributes.</p>
-      <div class="search-row">
-        <input type="search" id="search" placeholder="🔍  e.g. All I Want for Christmas" autocomplete="off" aria-label="Search for a song" />
-        <button class="primary" id="searchBtn">Set</button>
-        <div class="suggest" id="suggest" role="listbox"></div>
-      </div>
-      <div class="baseline-pill" id="baselinePill">
-        <span class="swatch"></span><span id="baselineText"></span>
-        <button class="ghost" id="clearBaseline">Clear</button>
-      </div>
-    </div>
-
-    <div class="card">
-      <h2><span class="num">2</span>Tune the attributes</h2>
-      <p class="sub">Drag a slider up or down. Uncheck one to ignore it.</p>
+      <h2>Attributes</h2>
+      <p class="sub">Uncheck one to ignore it.</p>
       <div class="vlegend">
         <span><i class="sq" style="background:var(--baseline)"></i>Song's value</span>
         <span><i class="sq" style="background:var(--change)"></i>Your change</span>
@@ -279,21 +387,21 @@
         <span id="changedCount"></span>
         <button class="ghost" id="resetBtn">↺ Reset to song</button>
       </div>
-      <div class="tolerance">
-        <span>Match tolerance</span>
-        <input type="range" id="tol" min="5" max="40" value="20" aria-label="Match tolerance" />
-        <span id="tolVal" style="font-variant-numeric:tabular-nums;width:34px;text-align:right">±20</span>
-      </div>
+      <details class="advanced">
+        <summary>Advanced</summary>
+        <div class="tolerance">
+          <span>How close a match</span>
+          <input type="range" id="tol" min="5" max="40" value="20" aria-label="Match tolerance" />
+          <span id="tolVal" style="font-variant-numeric:tabular-nums;width:34px;text-align:right">±20</span>
+        </div>
+      </details>
     </div>
-  </section>
 
-  <!-- ============ Column 2: background map + results ============ -->
-  <section class="col-2">
     <div class="card">
       <div class="viz-head">
         <div>
           <h2>Song map</h2>
-          <p class="sub">Every song in the dataset. Matches light up as you move the sliders.</p>
+          <p class="sub">Click a dot to explore from that song.</p>
         </div>
         <div class="axis-select">
           X <select id="xAxis"></select>
@@ -306,47 +414,58 @@
         <span><i style="background:transparent;border:2.5px solid var(--baseline)"></i>Searched song</span>
         <span><i style="background:transparent;border:1.5px dashed var(--change);border-radius:2px"></i>Your target range</span>
       </div>
-      <svg id="scatter" viewBox="0 0 640 400" role="img" aria-label="Scatter plot of songs"></svg>
-    </div>
-
-    <div class="card">
-      <h2>Our recommendations <span class="count" id="matchCount"></span></h2>
-      <p class="sub">Play to listen, tick <b>Add to chart</b> to put a song on your spider chart (played songs are added for you).</p>
-      <div class="player" id="player">
-        <div class="player-head"><span>Now playing</span><span><a id="openSpotify" target="_blank" rel="noopener">Open in Spotify ↗</a> · <button class="ghost" id="closePlayer" style="padding:0 6px;font-size:12px">Close ✕</button></span></div>
-        <div id="playerFrame"></div>
-      </div>
-      <div class="banner" id="noMatch"></div>
-      <div class="results" id="results"></div>
+      <svg id="scatter" viewBox="0 0 760 420" role="img" aria-label="Scatter plot of songs"></svg>
     </div>
   </section>
 
-  <!-- ============ Column 3: spider ============ -->
-  <section class="col-3">
-    <div class="card">
-      <h2><span class="num">3</span>Your style profile</h2>
-      <p class="sub">Built from every song you played or added.</p>
-      <div class="legend" id="radarLegend" style="margin-bottom:6px;display:none">
-        <span><i style="background:var(--match)"></i>Your chart (avg.)</span>
-        <span id="lgBaseline"><i style="background:transparent;border:2px dashed var(--baseline)"></i>Searched song</span>
-        <span id="lgTarget"><i style="background:transparent;border:2px solid var(--change)"></i>Your target</span>
-        <span id="lgHover" style="display:none"><i style="background:var(--text-secondary)"></i><span id="lgHoverName">Hovered</span></span>
+  <!-- ============ 3. Recommendations ============ -->
+  <div class="section-title"><h2>Our recommendations <span class="count" id="matchCount"></span></h2><p>Play a song, then add the ones you like.</p></div>
+  <section class="card">
+    <div class="player" id="player">
+      <div class="player-head"><span>Now playing</span><span><a id="openSpotify" target="_blank" rel="noopener">Open in Spotify ↗</a> · <button class="ghost" id="closePlayer" style="padding:0 6px;font-size:var(--fs-small)">Close ✕</button></span></div>
+      <div id="playerFrame"></div>
+    </div>
+    <div class="banner" id="noMatch"></div>
+    <div class="results" id="results"></div>
+  </section>
+
+  <!-- ============ 4. Spider chart ============ -->
+  <div class="section-title"><h2>Your style profile</h2><p>Your taste, based on the songs you added.</p></div>
+  <section class="card">
+    <div class="profile">
+      <div>
+        <div class="legend" id="radarLegend" style="margin-bottom:6px;display:none">
+          <span><i style="background:var(--match)"></i>Your chart (avg.)</span>
+          <span id="lgBaseline"><i style="background:transparent;border:2px dashed var(--baseline)"></i>Searched song</span>
+          <span id="lgTarget"><i style="background:transparent;border:2px solid var(--change)"></i>Your target</span>
+          <span id="lgHover" style="display:none"><i style="background:var(--text-secondary)"></i><span id="lgHoverName">Hovered</span></span>
+        </div>
+        <div class="empty" id="radarEmpty">
+          <b>No songs added yet</b>
+          Add a recommendation to see your profile.
+        </div>
+        <svg id="radar" viewBox="0 0 360 320" role="img" aria-label="Spider chart of chosen songs"></svg>
       </div>
-      <div class="empty" id="radarEmpty">
-        <b>No chart yet</b>
-        Tick <strong>Add to chart</strong> on a recommendation (or play one) to generate your spider chart.
+      <div>
+        <div class="genres" id="genres" style="display:none"></div>
+        <div class="chosen" id="chosen"><p class="sub">Songs you add will be listed here.</p></div>
+        <details id="radarTableWrap" style="display:none">
+          <summary>Show as table</summary>
+          <div id="radarTable"></div>
+        </details>
       </div>
-      <svg id="radar" viewBox="0 0 360 320" role="img" aria-label="Spider chart of chosen songs"></svg>
-      <div class="chosen" id="chosen"></div>
-      <details id="radarTableWrap" style="display:none">
-        <summary>Show as table</summary>
-        <div id="radarTable"></div>
-      </details>
+    </div>
+    <div class="more" id="more" style="display:none">
+      <h3>More for you, across genres</h3>
+      <p>Here are some recommendations for you in different genres, picked to match your profile.</p>
+      <div class="gcards" id="gcards"></div>
     </div>
   </section>
 </main>
 
-<p class="note">Prototype · Data: <a href="https://www.kaggle.com/datasets/rishabhpancholi1302/spotify-most-popular-songs-dataset" target="_blank" rel="noopener">Spotify Most Popular Songs Dataset</a> (Kaggle, 900 tracks, mostly 2015–2020). Audio features are relative 0–100 scores within this dataset (min-max scaled), so tempo is “slower ↔ faster”, not BPM. Playback uses Spotify's embedded player.</p>
+
+<p class="note">Data: <a href="https://www.kaggle.com/datasets/rishabhpancholi1302/spotify-most-popular-songs-dataset" target="_blank" rel="noopener">Spotify Most Popular Songs</a> (Kaggle, 900 songs, mostly 2015–2020). Scores are 0–100, relative to these songs.</p>
+</div>
 
 <!-- Error screen (search fail) -->
 <div class="overlay" id="errorOverlay" role="dialog" aria-modal="true" aria-labelledby="errTitle">
@@ -403,7 +522,7 @@ const $ = id => document.getElementById(id);
 
 function markStep(s) {
   state.steps.add(s);
-  document.querySelectorAll(".step-chip").forEach(c => c.classList.toggle("done", state.steps.has(c.dataset.step)));
+  document.querySelectorAll("#steps [data-step]").forEach(c => c.classList.toggle("done", state.steps.has(c.dataset.step)));
 }
 function toast(msg) {
   const t = $("toast"); t.textContent = msg; t.classList.add("show");
@@ -428,14 +547,12 @@ function buildSliders() {
     col.innerHTML = `
       <input type="checkbox" id="en-${a.key}" aria-label="Use ${a.label} for matching" title="Use for matching">
       <div class="vval" id="val-${a.key}"></div>
-      <div class="vend">${a.hi}</div>
-      <div class="vtrack" id="tr-${a.key}" role="slider" tabindex="0" aria-label="${a.label}" aria-valuemin="0" aria-valuemax="100" aria-orientation="vertical">
+      <div class="vtrack" id="tr-${a.key}" role="slider" tabindex="0" title="${a.lo} ↔ ${a.hi}" aria-label="${a.label}, ${a.lo} to ${a.hi}" aria-valuemin="0" aria-valuemax="100" aria-orientation="vertical">
         <div class="rail"></div>${ticks}
         <div class="delta" id="dl-${a.key}"></div>
         <div class="mk base" id="bs-${a.key}"></div>
         <div class="mk handle" id="hd-${a.key}"></div>
       </div>
-      <div class="vend">${a.lo}</div>
       <div class="vname" id="nm-${a.key}" title="${a.label}">${a.short || a.label}</div>`;
     host.appendChild(col);
 
@@ -485,7 +602,7 @@ function syncSliders() {
     if (b !== null) { dl.style.bottom = Math.min(v, b) + "%"; dl.style.height = Math.abs(v - b) + "%"; }
     $("val-" + a.key).innerHTML = b !== null && !same
       ? `<span class="from">${a.fmt(b)}</span><span class="to changed">${a.fmt(v)}</span>`
-      : `<span class="from">&nbsp;</span><span class="to">${a.fmt(v)}</span>`;
+      : `<span class="from" style="visibility:hidden">&nbsp;</span><span class="to">${a.fmt(v)}</span>`;
     if (a.key === "mood") {
       const label = MOODS.find(m => v < m[0])[1];
       $("nm-mood").innerHTML = faceSVG(v) + "Mood";
@@ -524,7 +641,16 @@ function lev(a, b) {
 }
 function findSongs(q) {
   const c = clean(q); if (!c) return [];
-  return SONGS.filter(s => clean(s.title).includes(c) || clean(s.artist).includes(c) || clean(s.title + " " + s.artist).includes(c));
+  // rank: title starts with query > a word in the title starts with it > anywhere in title/artist; then popularity
+  const rank = s => {
+    const t = clean(s.title);
+    if (t.startsWith(c)) return 0;
+    if ((" " + t).includes(" " + c)) return 1;
+    if (clean(s.artist).startsWith(c)) return 2;
+    return 3;
+  };
+  return SONGS.filter(s => clean(s.title).includes(c) || clean(s.artist).includes(c) || clean(s.title + " " + s.artist).includes(c))
+    .sort((a, b) => rank(a) - rank(b) || b.pop - a.pop);
 }
 function nearestTitles(q, n = 3) {
   const c = clean(q);
@@ -563,6 +689,13 @@ function submitSearch() {
   if (hits.length) setBaseline(hits[0]);
   else showError(q);                      // step ① fail → error screen
 }
+function reveal() {
+  if (!document.body.classList.contains("locked")) return;
+  document.body.classList.remove("locked");
+  renderScatter(); renderProfile();
+  requestAnimationFrame(() => $("exploreTitle").scrollIntoView({ behavior: "smooth", block: "start" }));
+}
+$("skipBtn").addEventListener("click", reveal);
 function setBaseline(s, isReset) {
   state.baseline = s;
   $("search").value = ""; $("suggest").style.display = "none";
@@ -571,6 +704,7 @@ function setBaseline(s, isReset) {
   ATTRS.forEach(a => state.enabled[a.key] = true);
   const vals = {}; ATTRS.forEach(a => vals[a.key] = norm(s, a.key));
   markStep("search");
+  reveal();
   animateTo(vals);
   toast(isReset ? `Sliders reset to “${s.title}”` : `Sliders set to “${s.title}”`);
 }
@@ -585,7 +719,7 @@ function showError(q) {
 }
 function hideError() { $("errorOverlay").classList.remove("show"); }
 $("errRetry").addEventListener("click", () => { hideError(); $("search").select(); $("search").focus(); });
-$("errBrowse").addEventListener("click", () => { hideError(); $("search").value = ""; $("tr-energy").focus(); });
+$("errBrowse").addEventListener("click", () => { hideError(); $("search").value = ""; reveal(); });
 $("errorOverlay").addEventListener("click", e => { if (e.target.id === "errorOverlay") hideError(); });
 document.addEventListener("keydown", e => { if (e.key === "Escape") hideError(); });
 
@@ -646,7 +780,7 @@ function renderResults() {
         <label class="addchk ${chosen ? "on" : ""}"><input type="checkbox" data-add="${s.id}" ${chosen ? "checked" : ""}>Add to chart</label>
       </div>
     </div>`;
-  }).join("") + (state.matches.length > 8 ? `<p class="sub" style="margin:8px 6px 0">+ ${state.matches.length - 8} more on the map — tighten tolerance to narrow down.</p>` : "");
+  }).join("") + (state.matches.length > 8 ? `<p class="sub" style="margin:8px 6px 0">+ ${state.matches.length - 8} more on the map.</p>` : "");
   res.querySelectorAll("[data-play]").forEach(b => b.onclick = () => togglePlay(SONGS[+b.dataset.play]));
   res.querySelectorAll("[data-add]").forEach(b => b.onchange = () => toggleChosen(SONGS[+b.dataset.add]));
   res.querySelectorAll(".song").forEach(r => {
@@ -657,17 +791,17 @@ function renderResults() {
 
 // ---------------------------------------------------------------- playback (simulated)
 function togglePlay(s) {
-  if (state.playing && state.playing.id === s.id) { stopPlay(); renderResults(); return; }
+  if (state.playing && state.playing.id === s.id) { stopPlay(); renderResults(); renderProfile(); return; }
   state.playing = { id: s.id };
   $("playerFrame").innerHTML = `<iframe title="Spotify player: ${s.title.replace(/"/g, "&quot;")}" src="https://open.spotify.com/embed/track/${s.trackId}?utm_source=generator" allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture" loading="lazy"></iframe>`;
   $("openSpotify").href = `https://open.spotify.com/track/${s.trackId}`;
-  $("player").classList.add("show");
+  $("player").classList.add("show"); document.body.classList.add("has-player");
   if (!state.chosen.has(s.id)) { state.chosen.set(s.id, "played"); toast(`“${s.title}” added to your chart`); }
   markStep("listen");
   renderResults(); renderProfile();
 }
-function stopPlay() { state.playing = null; $("player").classList.remove("show"); $("playerFrame").innerHTML = ""; }
-$("closePlayer").addEventListener("click", () => { stopPlay(); renderResults(); });
+function stopPlay() { state.playing = null; $("player").classList.remove("show"); document.body.classList.remove("has-player"); $("playerFrame").innerHTML = ""; }
+$("closePlayer").addEventListener("click", () => { stopPlay(); renderResults(); renderProfile(); });
 function toggleChosen(s) {
   if (state.chosen.has(s.id)) state.chosen.delete(s.id); else state.chosen.set(s.id, "added");
   renderResults(); renderProfile();
@@ -685,18 +819,18 @@ function initAxes() {
 let lastMatchIds = new Set();
 function renderScatter(stale) {
   if (stale === false) lastMatchIds = new Set(state.matches.map(m => m.s.id));
-  const W = 640, H = 400, L = 48, R = 16, T = 12, B = 40;
+  const W = 760, H = 420, L = 48, R = 16, T = 12, B = 40;
   const x = v => L + v / 100 * (W - L - R), y = v => H - B - v / 100 * (H - T - B);
   const xa = ATTRS.find(a => a.key === xKey), ya = ATTRS.find(a => a.key === yKey);
   let g = "";
   for (let i = 0; i <= 100; i += 25) {
     g += `<line x1="${x(i)}" x2="${x(i)}" y1="${T}" y2="${H - B}" stroke="var(--grid)"/>`;
     g += `<line x1="${L}" x2="${W - R}" y1="${y(i)}" y2="${y(i)}" stroke="var(--grid)"/>`;
-    g += `<text x="${x(i)}" y="${H - B + 16}" font-size="11" fill="var(--text-muted)" text-anchor="middle">${i}</text>`;
-    g += `<text x="${L - 8}" y="${y(i) + 4}" font-size="11" fill="var(--text-muted)" text-anchor="end">${i}</text>`;
+    g += `<text x="${x(i)}" y="${H - B + 16}" font-size="13" fill="var(--text-secondary)" text-anchor="middle">${i}</text>`;
+    g += `<text x="${L - 8}" y="${y(i) + 4}" font-size="13" fill="var(--text-secondary)" text-anchor="end">${i}</text>`;
   }
-  g += `<text x="${(L + W - R) / 2}" y="${H - 6}" font-size="12" fill="var(--text-secondary)" text-anchor="middle">${xa.label} → (${xa.lo} … ${xa.hi})</text>`;
-  g += `<text transform="translate(14 ${(T + H - B) / 2}) rotate(-90)" font-size="12" fill="var(--text-secondary)" text-anchor="middle">${ya.label} → (${ya.lo} … ${ya.hi})</text>`;
+  g += `<text x="${(L + W - R) / 2}" y="${H - 6}" font-size="14" fill="var(--text-primary)" text-anchor="middle">${xa.label} → (${xa.lo} … ${xa.hi})</text>`;
+  g += `<text transform="translate(14 ${(T + H - B) / 2}) rotate(-90)" font-size="14" fill="var(--text-primary)" text-anchor="middle">${ya.label} → (${ya.lo} … ${ya.hi})</text>`;
 
   // target window (only drawn on enabled axes)
   const tx = state.target[xKey], ty = state.target[yKey], t = state.tol;
@@ -717,7 +851,7 @@ function renderScatter(stale) {
   if (state.baseline) {
     const s = state.baseline, bx = x(norm(s, xKey)), by = y(norm(s, yKey));
     g += `<circle cx="${bx}" cy="${by}" r="9" fill="none" stroke="var(--baseline)" stroke-width="2.5"/>`;
-    g += `<text x="${bx + 13}" y="${by + 4}" font-size="12" font-weight="600" fill="var(--text-primary)" paint-order="stroke" stroke="var(--surface-1)" stroke-width="3">${s.title}</text>`;
+    g += `<text x="${bx + 13}" y="${by + 4}" font-size="14" font-weight="600" fill="var(--text-primary)" paint-order="stroke" stroke="var(--surface-1)" stroke-width="3">${s.title}</text>`;
   }
   // invisible larger hit targets
   SONGS.forEach(s => g += `<circle class="hit" data-id="${s.id}" cx="${x(norm(s, xKey))}" cy="${y(norm(s, yKey))}" r="6" fill="transparent" style="cursor:pointer"/>`);
@@ -761,7 +895,7 @@ function renderRadar() {
     const [ex, ey] = pt(i, 100), [lx, ly] = pt(i, 128);
     g += `<line x1="${cx}" y1="${cy}" x2="${ex}" y2="${ey}" stroke="var(--grid)"/>`;
     const anchor = Math.abs(lx - cx) < 8 ? "middle" : lx > cx ? "start" : "end";
-    g += `<text x="${lx}" y="${ly + 4}" font-size="12" fill="var(--text-secondary)" text-anchor="${anchor}">${a.short || a.label}</text>`;
+    g += `<text x="${lx}" y="${ly + 4}" font-size="14" font-weight="600" fill="var(--text-primary)" text-anchor="${anchor}">${a.short || a.label}</text>`;
   });
   const avg = ATTRS.map(a => chosen.reduce((t, s) => t + norm(s, a.key), 0) / chosen.length);
   const series = [];
@@ -777,7 +911,7 @@ function renderRadar() {
   // direct value labels on the profile only
   avg.forEach((v, i) => {
     const [x, y] = pt(i, Math.min(Math.max(v, 18) + 12, 110));
-    g += `<text x="${x}" y="${y + 4}" font-size="11" font-weight="600" text-anchor="middle" fill="var(--text-primary)" paint-order="stroke" stroke="var(--surface-1)" stroke-width="3">${Math.round(v)}</text>`;
+    g += `<text x="${x}" y="${y + 4}" font-size="13" font-weight="700" text-anchor="middle" fill="var(--text-primary)" paint-order="stroke" stroke="var(--surface-1)" stroke-width="3">${Math.round(v)}</text>`;
   });
   svg.innerHTML = g;
   $("lgBaseline").style.display = state.baseline ? "inline-flex" : "none";
@@ -787,10 +921,81 @@ function renderRadar() {
   $("radarTable").innerHTML = `<table><tr><th>Attribute</th><th>Your profile</th>${state.baseline ? "<th>Baseline</th>" : ""}</tr>` +
     ATTRS.map((a, i) => `<tr><td>${a.label}</td><td>${a.fmt(avg[i])}</td>${state.baseline ? `<td>${a.fmt(norm(state.baseline, a.key))}</td>` : ""}</tr>`).join("") + "</table>";
 }
-function renderProfile() { renderChosenList([...state.chosen.keys()].map(id => SONGS[id])); renderRadar(); }
+function renderProfile() {
+  const chosen = [...state.chosen.keys()].map(id => SONGS[id]);
+  renderChosenList(chosen); renderRadar(); renderGenres(chosen); renderMore(chosen);
+}
+
+// ---------------------------------------------------------------- genre interpretation
+const GENRES = [...new Set(SONGS.map(s => s.genre))];
+function renderGenres(chosen) {
+  const box = $("genres");
+  if (!chosen.length) { box.style.display = "none"; return; }
+  const counts = {};
+  chosen.forEach(s => counts[s.genre] = (counts[s.genre] || 0) + 1);
+  const rows = Object.entries(counts).sort((a, b) => b[1] - a[1]).map(([g, n]) => [g, Math.round(n / chosen.length * 100)]);
+  const parts = rows.map(([g, p], i) => `<b>${p}%</b> ${i === 0 ? "are " : ""}${g}`);
+  const sentence = rows.length === 1 ? `All of the songs you added are <b>${rows[0][0]}</b>.`
+    : `Of the songs you added, ${parts.slice(0, -1).join(", ")} and ${parts[parts.length - 1]}.`;
+  box.innerHTML = `<p class="genre-summary">${sentence}</p>` +
+    rows.map(([g, p]) => `<div class="gbar"><span>${g}</span><div class="track"><div class="fill" style="width:${p}%"></div></div><span class="pct">${p}%</span></div>`).join("");
+  box.style.display = "block";
+}
+
+// ---------------------------------------------------------------- profile-based recommendations, one per genre
+function profileVector(chosen) { return ATTRS.map(a => chosen.reduce((t, s) => t + s[a.key], 0) / chosen.length); }
+function renderMore(chosen) {
+  const box = $("more");
+  if (!chosen.length) { box.style.display = "none"; return; }
+  const avg = profileVector(chosen), mine = new Set(chosen.map(s => s.genre));
+  const picks = GENRES.map(g => {
+    const best = SONGS.filter(s => s.genre === g && !state.chosen.has(s.id))
+      .map(s => ({ s, d: Math.sqrt(ATTRS.reduce((t, a, i) => t + (s[a.key] - avg[i]) ** 2, 0) / ATTRS.length) }))
+      .sort((a, b) => a.d - b.d || b.s.pop - a.s.pop)[0];
+    return best && { ...best, score: Math.max(0, Math.round(100 - best.d * 1.6)) };
+  }).filter(Boolean).sort((a, b) => b.score - a.score);
+  $("gcards").innerHTML = picks.map(({ s, score }) => {
+    const playing = state.playing && state.playing.id === s.id, isNew = !mine.has(s.genre);
+    return `<div class="gcard" data-id="${s.id}">
+      <div class="cover" style="background-image:url('${ART(s.art)}')">
+        <button class="play ${playing ? "playing" : ""}" data-play="${s.id}" aria-label="${playing ? "Close player for" : "Play"} ${s.title}">${playing ? "■" : "▶"}</button>
+      </div>
+      <span class="gtag ${isNew ? "new" : ""}">${s.genre}${isNew ? " · new for you" : ""}</span>
+      <div class="title" title="${s.title}">${s.title}</div>
+      <div class="meta">${s.artist} · ${s.year}</div>
+      <div class="row"><span>${score}% match</span><button data-add="${s.id}">＋ Add</button></div>
+    </div>`;
+  }).join("");
+  box.style.display = "block";
+  box.querySelectorAll("[data-play]").forEach(b => b.onclick = () => togglePlay(SONGS[+b.dataset.play]));
+  box.querySelectorAll("[data-add]").forEach(b => b.onclick = () => { const s = SONGS[+b.dataset.add]; toggleChosen(s); toast(`“${s.title}” added to your chart`); });
+  box.querySelectorAll(".gcard").forEach(c => {
+    c.onmouseenter = () => { state.hoverId = +c.dataset.id; renderRadar(); };
+    c.onmouseleave = () => { state.hoverId = null; renderRadar(); };
+  });
+}
+
+// ---------------------------------------------------------------- theme switch
+function currentTheme() {
+  return document.documentElement.dataset.theme || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+}
+function syncThemeButton() {
+  const dark = currentTheme() === "dark";
+  $("themeIco").textContent = dark ? "☀" : "☾";
+  $("themeLbl").textContent = dark ? "Light" : "Dark";
+  $("themeToggle").setAttribute("aria-label", dark ? "Switch to light mode" : "Switch to dark mode");
+}
+$("themeToggle").addEventListener("click", () => {
+  const next = currentTheme() === "dark" ? "light" : "dark";
+  document.documentElement.dataset.theme = next;
+  try { localStorage.setItem("cb-theme", next); } catch (e) {}
+  syncThemeButton();
+});
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change", syncThemeButton);
+syncThemeButton();
 function renderChosenList(chosen) {
-  $("chosen").innerHTML = chosen.length ? `<p class="sub" style="margin:6px 0 4px">${chosen.length} song${chosen.length > 1 ? "s" : ""} in profile</p>` +
-    chosen.map(s => `<div class="chip-row" data-id="${s.id}"><span>${s.title} <small>· ${s.artist}</small><span class="tag">${state.chosen.get(s.id)}</span></span><button class="ghost" data-rm="${s.id}" aria-label="Remove ${s.title}">✕</button></div>`).join("") : "";
+  $("chosen").innerHTML = !chosen.length ? `<p class="sub">Songs you add will be listed here.</p>` : `<p class="sub" style="margin:6px 0 4px">${chosen.length} song${chosen.length > 1 ? "s" : ""} in profile</p>` +
+    chosen.map(s => `<div class="chip-row" data-id="${s.id}"><span>${s.title} <small>· ${s.artist}</small><span class="tag">${state.chosen.get(s.id)}</span></span><button class="ghost" data-rm="${s.id}" aria-label="Remove ${s.title}">✕</button></div>`).join("");
   $("chosen").querySelectorAll("[data-rm]").forEach(b => b.onclick = () => { state.chosen.delete(+b.dataset.rm); renderResults(); renderProfile(); });
   $("chosen").querySelectorAll(".chip-row").forEach(r => {
     r.onmouseenter = () => { state.hoverId = +r.dataset.id; renderRadar(); renderScatter(); };
