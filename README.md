@@ -46,7 +46,7 @@ Other interactions:
 
 - **Song map** (scatter plot of all 900 songs): hover a dot for details, click a dot to use that song as your baseline, and switch either axis with the X / Y dropdowns.
 - **▶ Play** opens Spotify's embedded player in a dock at the bottom-right (a preview, or the full song if you are logged in to Spotify).
-- **Dark / Light** button (top-right) switches the theme and remembers your choice; by default the page follows your system setting.
+- **Top bar** (on every page, stays pinned while you scroll): switch between *Style Explorer*, *Artist profiles* and *Distributions & keys*. Its **Dark / Light** button switches the theme on all pages and remembers your choice; by default the site follows your system setting.
 - **Reset to song** returns every slider to the searched song's values.
 - Hover a song in the recommendations or profile list to overlay it on the spider chart.
 - A "Show as table" option under the spider chart lists the same values in a table.
@@ -67,7 +67,7 @@ On a slider, a blue square marks the song's original value. Once you drag away f
 
 One page per artist for 1,035 artists with 20+ tracks: a sound fingerprint (each attribute vs. the average artist, with percentile), a mood map of their top tracks, hits vs. deep cuts, top tracks and genres, and "Sounds like" artists you can click through. Search or press *Random artist*.
 
-- Open it from the link under the explorer's title, or click an **underlined artist name** in the explorer (search pill, recommendations, *More for you*). Names are only linked when that artist has a profile.
+- Open it from the top bar, or click an **underlined artist name** in the explorer (search pill, recommendations, *More for you*). Names are only linked when that artist has a profile.
 - Deep link: `artist-profiles.html?artist=Katy%20Perry`. An unknown name shows a note and falls back to The Weeknd.
 - The page is self-contained (its data is inlined, about 1.5 MB). `data/artist_names.js` lists which artists have a profile; if the page's data changes, rebuild it with `python3 data/build_artist_names.py artist-profiles.html data/artist_names.js`.
 
@@ -84,7 +84,7 @@ The page has two parts, top to bottom.
 
 **2. Études in twelve keys** (below the ridgelines):
 
-A circle of fifths built from about 90k Spotify tracks. Open the page from the link under the explorer's title or the nav bar; *Skip to Études in twelve keys ↓* jumps past the ridgelines.
+A circle of fifths built from about 90k Spotify tracks. Open the page from the top bar; *Skip to Études in twelve keys ↓* jumps past the ridgelines.
 
 - **Outer ring = major keys, inner ring = their relative minors.** Bar length is the share of songs in that key; both rings use the same scale.
 - **Songs** dropdown: filter by popularity (default *Hits: popularity 60+*). The dashed outline shows every song in the same genre family, so you can see which keys hits favor.
