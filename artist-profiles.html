@@ -134,13 +134,19 @@
   .sb-links { display: flex; gap: 4px; flex: 1; overflow-x: auto; scrollbar-width: none; }
   .sb-links::-webkit-scrollbar { display: none; }
   .sb-short { display: none; }
+  /* reserve the bold width on every tab, so the current (bold) tab doesn't push the others */
+  .sb-long, .sb-short { flex-direction: column; }
+  .sb-long { display: inline-flex; }
+  .sb-long::after, .sb-short::after { content: attr(data-t); font-weight: 600; height: 0; overflow: hidden; visibility: hidden; user-select: none; pointer-events: none; }
+  /* keep the same width whether or not a page scrolls, so the bar never shifts sideways */
+  html { scrollbar-gutter: stable; }
   .sb-links a { color: var(--text-secondary); text-decoration: none; padding: 15px 12px 13px; border-bottom: 2px solid transparent; white-space: nowrap; }
   .sb-links a:hover { color: var(--text-primary, var(--ink)); }
   .sb-links a[aria-current="page"] { color: var(--text-primary, var(--ink)); font-weight: 600; border-bottom-color: currentColor; }
   .sb-links a:focus-visible, .sb-theme:focus-visible, .sb-brand:focus-visible { outline: 2px solid var(--series-1, var(--accent)); outline-offset: -2px; border-radius: 4px; }
   button.sb-theme { margin-left: auto; flex: none; display: inline-flex; align-items: center; gap: 6px; font: inherit; font-size: 14px; color: var(--text-primary, var(--ink)); background: var(--surface-1); border: 1px solid var(--border); border-radius: 999px; padding: 5px 12px; cursor: pointer; }
   button.sb-theme:hover { border-color: var(--text-muted); }
-  @media (max-width: 640px) { .sb-in { padding: 0 12px; gap: 8px; } .sb-brand .sb-name, .sb-theme .sb-lbl { display: none; } .sb-long { display: none; } .sb-short { display: inline !important; } .sb-links a { padding: 15px 8px 13px; } }
+  @media (max-width: 640px) { .sb-in { padding: 0 12px; gap: 8px; } .sb-brand .sb-name, .sb-theme .sb-lbl { display: none; } .sb-long { display: none; } .sb-short { display: inline-flex !important; } .sb-links a { padding: 15px 8px 13px; } }
 </style>
 </head>
 <body>
@@ -148,9 +154,9 @@
   <div class="sb-in">
     <a class="sb-brand" href="style-explorer.html"><span class="sb-clef" aria-hidden="true">𝄞</span><span class="sb-name">Chart Busters</span></a>
     <nav class="sb-links" aria-label="Pages">
-      <a href="style-explorer.html"><span class="sb-long">Style Explorer</span><span class="sb-short">Explorer</span></a>
-      <a href="artist-profiles.html" aria-current="page"><span class="sb-long">Artist profiles</span><span class="sb-short">Artists</span></a>
-      <a href="key-wheel.html"><span class="sb-long">Distributions &amp; keys</span><span class="sb-short">Distributions</span></a>
+      <a href="style-explorer.html"><span class="sb-long" data-t="Style Explorer">Style Explorer</span><span class="sb-short" data-t="Explorer">Explorer</span></a>
+      <a href="artist-profiles.html" aria-current="page"><span class="sb-long" data-t="Artist profiles">Artist profiles</span><span class="sb-short" data-t="Artists">Artists</span></a>
+      <a href="key-wheel.html"><span class="sb-long" data-t="Distributions &amp; keys">Distributions &amp; keys</span><span class="sb-short" data-t="Distributions">Distributions</span></a>
     </nav>
     <button class="sb-theme" id="themeToggle" aria-label="Switch to dark mode"><span id="themeIco">☾</span><span class="sb-lbl" id="themeLbl">Dark</span></button>
   </div>
