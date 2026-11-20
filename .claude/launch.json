@@ -4,8 +4,23 @@
     {
       "name": "style-explorer",
       "runtimeExecutable": "python3",
-      "runtimeArgs": ["-m", "http.server", "8765", "--bind", "127.0.0.1"],
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "8765",
+        "--bind",
+        "127.0.0.1"
+      ],
       "port": 8765
+    },
+    {
+      "name": "key-wheel",
+      "runtimeExecutable": "sh",
+      "runtimeArgs": [
+        "-c",
+        "python3 -m http.server ${PORT:-8768} --bind 127.0.0.1"
+      ],
+      "port": 8768
     }
   ]
 }

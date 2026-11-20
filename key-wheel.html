@@ -1,0 +1,1163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Chart Busters · Song distributions &amp; keys</title>
+<script>
+  // same saved theme as the Style Explorer, applied before first paint
+  try { const t = localStorage.getItem("cb-theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}
+</script>
+<script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400;0,500;1,400&family=Noto+Music&display=swap" rel="stylesheet" />
+<style>
+  /* EB Garamond draws ♭ like a plain "b": take accidentals and the clef from a symbol font */
+  @font-face { font-family: "Accidentals"; src: local("Apple Symbols"), local("Segoe UI Symbol"), local("Noto Music"), local("DejaVu Sans"); unicode-range: U+266D-266F, U+1D11E; }
+  :root {
+    color-scheme: light;
+    --bg: #f4f3ef;
+    --paper: #fbf8f1;
+    --surface-1: #fcfcfb;
+    --border: #e2dccd;
+    --ink: #1b1a17;
+    --text-secondary: #4f4c45;
+    --text-muted: #66625a;
+    --staff: rgba(27, 26, 23, 0.16);
+    --accent: #a8402b;        /* conductor's red pencil: the selected key */
+    --accent-bg: #f6e4dd;
+    --radius: 12px;
+    --serif: "Accidentals", "EB Garamond", "Iowan Old Style", Georgia, serif;
+    --music: "Noto Music", "Bravura", "Apple Symbols", "Segoe UI Symbol", serif;
+    --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --bg: #121211; --paper: #1a1916; --surface-1: #1f1e1b; --border: #37352f;
+      --ink: #efece4; --text-secondary: #c6c2b6; --text-muted: #a6a296;
+      --staff: rgba(239, 236, 228, 0.16); --accent: #e98a72; --accent-bg: #3a231d;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --bg: #121211; --paper: #1a1916; --surface-1: #1f1e1b; --border: #37352f;
+    --ink: #efece4; --text-secondary: #c6c2b6; --text-muted: #a6a296;
+    --staff: rgba(239, 236, 228, 0.16); --accent: #e98a72; --accent-bg: #3a231d;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.6 var(--sans); }
+  a { color: inherit; }
+  .page { max-width: 1120px; margin: 0 auto; padding: 20px 24px 64px; }
+  .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+  /* top bar */
+  .topbar { display: flex; justify-content: space-between; align-items: center; gap: 12px; font-size: 14px; }
+  .topbar a { color: var(--text-secondary); text-decoration: none; }
+  .topbar a:hover { color: var(--ink); text-decoration: underline; }
+  button { font: inherit; color: inherit; background: var(--surface-1); border: 1px solid var(--border); border-radius: 999px; padding: 6px 14px; cursor: pointer; }
+  button:hover { border-color: var(--text-muted); }
+  button:focus-visible, select:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  /* score sheet */
+  .sheet { background: var(--paper); border: 1px solid var(--border); border-radius: 4px; margin-top: 16px; padding: 28px 36px 36px; }
+  .score-head { display: grid; grid-template-columns: 1fr auto 1fr; align-items: end; gap: 16px; font-family: var(--serif); border-bottom: 1px solid var(--border); padding-bottom: 14px; }
+  .tempo { font-style: italic; font-size: 17px; color: var(--text-secondary); }
+  .opus { font-style: italic; font-size: 17px; color: var(--text-secondary); text-align: right; }
+  .score-head h1 { margin: 0; font-weight: 500; font-size: clamp(30px, 4.4vw, 46px); line-height: 1.1; text-align: center; letter-spacing: 0.01em; }
+  .subtitle { font-family: var(--serif); font-size: 21px; text-align: center; margin: 14px auto 4px; max-width: 640px; }
+  .lede { text-align: center; color: var(--text-secondary); max-width: 640px; margin: 0 auto; }
+
+  /* controls */
+  .controls { display: flex; flex-wrap: wrap; gap: 10px 20px; align-items: center; justify-content: center; margin: 22px 0 4px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; }
+  .chip { font-family: var(--serif); font-size: 16px; padding: 4px 12px; }
+  .chip[aria-pressed="true"] { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+  label.inline { display: inline-flex; gap: 8px; align-items: center; font-size: 15px; color: var(--text-secondary); }
+  select { font: inherit; font-size: 15px; color: var(--ink); background: var(--surface-1); border: 1px solid var(--border); border-radius: 8px; padding: 4px 8px; }
+
+  /* wheel + key card */
+  .stage { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 24px; align-items: start; margin-top: 8px; }
+  @media (max-width: 900px) { .stage { grid-template-columns: 1fr; } .sheet { padding: 20px 16px 28px; } .score-head { grid-template-columns: 1fr; text-align: center; } .opus { text-align: center; } }
+  #wheel { width: 100%; height: auto; display: block; color: var(--ink); font-family: var(--serif); }
+  #wheel .wedge { cursor: pointer; outline: none; }
+  #wheel .wedge:hover .hit, #wheel .wedge:focus .hit { opacity: 1; }
+  .legend { display: flex; flex-wrap: wrap; gap: 6px 20px; justify-content: center; font-size: 14px; color: var(--text-secondary); margin-top: -6px; }
+  .legend .sw { display: inline-block; width: 14px; height: 10px; vertical-align: -1px; margin-right: 6px; border-radius: 2px; }
+  .sample-note { text-align: center; font-size: 14px; color: var(--accent); min-height: 1.4em; margin: 4px 0 0; }
+
+  .card { background: var(--surface-1); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px 20px; position: sticky; top: 16px; }
+  .card h2 { font-family: var(--serif); font-weight: 500; font-size: 30px; margin: 0; line-height: 1.1; }
+  .card .rel { font-family: var(--serif); font-style: italic; color: var(--text-secondary); font-size: 17px; margin: 2px 0 8px; }
+  #sig { width: 100%; height: 92px; display: block; color: var(--ink); }
+  .sigcap { font-size: 14px; color: var(--text-muted); margin: -2px 0 10px; }
+  .share { font-family: var(--serif); font-size: 40px; line-height: 1; }
+  .share small { font-family: var(--sans); font-size: 15px; color: var(--text-secondary); margin-left: 6px; }
+  .vs { font-size: 15px; color: var(--text-secondary); margin: 6px 0 12px; }
+  .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 14px; }
+  .stat { background: var(--bg); border-radius: 8px; padding: 8px 10px; }
+  .stat b { display: block; font-family: var(--serif); font-weight: 500; font-size: 22px; line-height: 1.1; }
+  .stat span { font-size: 13px; color: var(--text-secondary); }
+  .card h3 { font-size: 15px; font-weight: 500; margin: 14px 0 6px; color: var(--text-secondary); }
+  .songs { list-style: none; padding: 0; margin: 0; }
+  .songs li { display: flex; justify-content: space-between; gap: 10px; padding: 6px 0; border-top: 1px solid var(--border); font-size: 15px; }
+  .songs a { text-decoration: none; }
+  .songs a:hover { text-decoration: underline; }
+  .songs .artist { color: var(--text-secondary); font-size: 14px; display: block; }
+  .songs .pop { font-size: 13px; color: var(--text-muted); white-space: nowrap; }
+
+  /* findings: margin notes on the score */
+  .notes { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; margin-top: 32px; }
+  @media (max-width: 900px) { .notes { grid-template-columns: 1fr; } }
+  .note { border-top: 2px solid var(--ink); padding-top: 10px; }
+  .note .mark { font-family: var(--serif); font-style: italic; font-size: 18px; color: var(--text-secondary); }
+  .note p { margin: 4px 0 0; font-size: 16px; }
+  .note p b { font-family: var(--serif); font-weight: 500; font-size: 20px; }
+  .mm { height: 14px; border-radius: 3px; background: var(--staff); margin-top: 10px; overflow: hidden; }
+  .mm div { height: 100%; background: var(--ink); }
+
+  /* movements: small multiples */
+  .movements h2 { font-family: var(--serif); font-weight: 500; font-size: 28px; margin: 44px 0 2px; text-align: center; }
+  .movements > p { text-align: center; color: var(--text-secondary); margin: 0 0 16px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 14px; }
+  .mv { background: none; border: 1px solid transparent; border-radius: var(--radius); padding: 8px 6px 10px; text-align: center; cursor: pointer; }
+  .mv:hover { border-color: var(--border); }
+  .mv[aria-pressed="true"] { border-color: var(--ink); }
+  .mv svg { width: 100%; max-width: 170px; height: auto; display: block; margin: 0 auto; color: var(--ink); }
+  .mv .t { font-family: var(--serif); font-size: 18px; display: block; }
+  .mv .s { font-size: 14px; color: var(--text-secondary); display: block; }
+
+  .about { margin-top: 40px; font-size: 15px; color: var(--text-secondary); border-top: 1px solid var(--border); padding-top: 14px; }
+  .about p { margin: 6px 0; }
+
+  /* ---------------- ridgelines (top of the page) ---------------- */
+  :root {
+    --color-fg: var(--ink); --color-fg-muted: var(--text-secondary); --color-bg: var(--bg); --color-panel: var(--paper);
+    --color-border-line: var(--border); --font-anthropic-sans: var(--sans); --font-anthropic-serif: var(--serif);
+    --cds-font-size-caption: 13px; --cds-font-size-body: 15px; --cds-font-size-heading: 18px; --cds-font-size-title: clamp(30px, 4.4vw, 46px);
+    --cds-font-weight-medium: 600;
+    --cds-gap-xs: 4px; --cds-gap-sm: 8px; --cds-gap-md: 12px; --cds-gap-lg: 20px; --cds-gap-xl: 32px;
+    --cds-pad-xs: 4px; --cds-pad-sm: 6px; --cds-pad-md: 10px; --cds-pad-lg: 20px; --cds-radius: 8px;
+    --cds-chart-grid: #ecebe6; --cds-chart-axis: #c9c8c2; --cds-chart-reference: #8a8984; --cds-text-secondary: var(--text-secondary);
+    --cds-surface-popover: var(--surface-1); --cds-border: var(--border); --cds-shadow-popover: 0 4px 16px rgba(0,0,0,.12);
+  }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --cds-chart-grid: #2c2c2a; --cds-chart-axis: #4a4a46; --cds-shadow-popover: 0 4px 16px rgba(0,0,0,.5); } }
+  :root[data-theme="dark"] { --cds-chart-grid: #2c2c2a; --cds-chart-axis: #4a4a46; --cds-shadow-popover: 0 4px 16px rgba(0,0,0,.5); }
+  .dash-select { font: inherit; font-size: var(--cds-font-size-body); color: var(--color-fg); background-color: var(--surface-1);
+    border: 1px solid var(--color-border-line); border-radius: var(--cds-radius); padding: 6px 10px; }
+  [hidden] { display: none !important; }
+  .ridge-sheet .rl-wrap > header { text-align: center; border-bottom: 1px solid var(--border); padding-bottom: 14px; }
+  .ridge-sheet .rl-title { font-weight: 500; line-height: 1.1; letter-spacing: 0.01em; }
+  .ridge-sheet .rl-lede { font-size: 16px; }
+  .ridge-sheet .rl-controls { justify-content: center; }
+  .ridge-sheet .rl-card { background: var(--surface-1); }
+  .page-nav { display: flex; gap: 18px; flex-wrap: wrap; align-items: center; }
+  .page-nav .brand { font-weight: 600; color: var(--text-muted); }
+  .page-nav a[aria-current] { color: var(--ink); font-weight: 600; }
+  .jump { text-align: center; font-size: 14px; color: var(--text-secondary); margin: 10px 0 0; }
+  .jump a { color: var(--text-secondary); }
+  .rl-wrap{ display: flex; flex-direction: column; gap: var(--cds-gap-lg); font-family: var(--font-anthropic-sans); color: var(--color-fg); }
+  .rl-title { font-family: var(--font-anthropic-serif); font-weight: 400; font-size: var(--cds-font-size-title); margin: 0; }
+  .rl-lede { margin: var(--cds-gap-xs) 0 0; color: var(--color-fg-muted); font-size: var(--cds-font-size-body); }
+  .rl-lede b { color: var(--color-fg); font-variant-numeric: tabular-nums; }
+  .rl-controls { display: flex; flex-wrap: wrap; gap: var(--cds-gap-md); align-items: end; }
+  .rl-field { display: flex; flex-direction: column; gap: var(--cds-gap-xs); font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); }
+  .rl-multi { min-width: 200px; height: 7.5em; background-color: var(--color-panel); color: var(--color-fg); border: 1px solid var(--color-border-line); border-radius: var(--cds-radius); font-family: var(--font-anthropic-sans); font-size: var(--cds-font-size-caption); padding: var(--cds-pad-xs); }
+  .rl-hint { font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); }
+  .rl-note { margin: 0; font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); }
+  .rl-card { background: var(--color-panel); border: 1px solid var(--color-border-line); border-radius: var(--cds-radius); padding: var(--cds-pad-lg); }
+  .rl-chart { position: relative; min-height: 420px; }
+  .rl-chart svg { display: block; overflow: visible; }
+  .rl-chart .rl-axis text { fill: var(--cds-text-secondary); font-size: var(--cds-font-size-caption); font-family: var(--font-anthropic-sans); }
+  .rl-chart .rl-axis path, .rl-chart .rl-axis line { stroke: var(--cds-chart-axis); }
+  .rl-chart .rl-grid line { stroke: var(--cds-chart-grid); }
+  .rl-label { fill: var(--color-fg); font-size: var(--cds-font-size-caption); font-family: var(--font-anthropic-sans); }
+  .rl-sub { fill: var(--cds-text-secondary); font-size: var(--cds-font-size-caption); font-family: var(--font-anthropic-sans); }
+  .rl-tip { position: absolute; pointer-events: none; background: var(--cds-surface-popover); border: 1px solid var(--cds-border); box-shadow: var(--cds-shadow-popover); border-radius: var(--cds-radius); padding: var(--cds-pad-sm) var(--cds-pad-md); font-size: var(--cds-font-size-caption); line-height: 1.45; max-width: 240px; font-variant-numeric: tabular-nums; }
+  .rl-tip .rl-tip-h { font-weight: var(--cds-font-weight-medium); color: var(--color-fg); }
+  .rl-tip .rl-tip-s { color: var(--cds-text-secondary); }
+  .rl-msg { color: var(--color-fg-muted); font-size: var(--cds-font-size-body); padding: var(--cds-pad-lg) 0; }
+  .rl-legend { display: flex; flex-wrap: wrap; align-items: center; gap: var(--cds-gap-sm) var(--cds-gap-md); margin: var(--cds-gap-sm) 0 var(--cds-gap-md); font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); }
+  .rl-legend-bar { min-height: 30px; margin-bottom: var(--cds-gap-sm); }
+  .rl-chart .rl-legend-bar text { fill: var(--cds-text-secondary); font-size: var(--cds-font-size-caption); font-family: var(--font-anthropic-sans); }
+  .rl-details summary { cursor: pointer; font-size: var(--cds-font-size-body); }
+  .rl-details ul { margin: var(--cds-gap-sm) 0 0; padding-left: 1.2em; font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); line-height: 1.6; }
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="topbar">
+    <nav class="page-nav" aria-label="Chart Busters pages">
+      <span class="brand">𝄞 Chart Busters</span>
+      <a href="style-explorer.html">Music Style Explorer</a>
+      <a href="artist-profiles.html">Artist profiles</a>
+      <a href="key-wheel.html" aria-current="page">Distributions &amp; keys</a>
+    </nav>
+    <button id="themeToggle" aria-label="Switch to dark mode"><span id="themeIco">☾</span> <span id="themeLbl">Dark</span></button>
+  </div>
+
+  <section class="sheet ridge-sheet" id="ridgelines" aria-label="Song attribute ridgelines">
+<div class="rl-wrap">
+  <header id="intro">
+    <h1 class="rl-title">Song attribute ridgelines</h1>
+    <p class="rl-lede">Showing <b data-draw="count" data-source="selection_count">—</b> songs. Every attribute is on a 0–1 scale.</p>
+  </header>
+
+  <div class="rl-controls" id="filters">
+    <label class="rl-field">Dataset
+      <select class="dash-select" id="ctl-dataset" data-param="dataset" aria-label="Dataset">
+        <option value="songs">My 900 songs</option>
+        <option value="spotify">Spotify 114k tracks</option>
+      </select>
+    </label>
+    <label class="rl-field">View
+      <select class="dash-select" id="ctl-view" data-param="view" aria-label="View">
+        <option value="attributes">All attributes for one genre</option>
+        <option value="compare">One attribute across genres</option>
+        <option value="eras" data-only="songs">One attribute across years</option>
+      </select>
+    </label>
+    <label class="rl-field" data-show="attributes compare" data-ds="songs">Years
+      <select class="dash-select" id="ctl-era" data-param="era" aria-label="Years">
+        <option value="all">All years</option>
+        <option value="pre2010">2009 and earlier</option>
+        <option value="2010-2014">2010–2014</option>
+        <option value="2015-2017">2015–2017</option>
+        <option value="2018">2018</option>
+        <option value="2019-2020">2019–2020</option>
+      </select>
+    </label>
+    <label class="rl-field" data-show="attributes eras" data-ds="songs">Genre
+      <select class="dash-select" id="ctl-genre" data-param="genre" aria-label="Genre">
+        <option value="all">All genres</option>
+        <option value="Pop">Pop</option>
+        <option value="Rap">Rap</option>
+        <option value="Latin">Latin</option>
+        <option value="R&amp;b">R&amp;B</option>
+        <option value="Rock">Rock</option>
+        <option value="Edm">EDM</option>
+      </select>
+    </label>
+    <label class="rl-field" data-show="attributes" data-ds="spotify" hidden>Genre
+      <select class="dash-select" id="ctl-sgenre" data-param="sgenre" aria-label="Spotify genre" data-draw="sgenre-options" data-source="spotify_bins"></select>
+    </label>
+    <label class="rl-field" data-show="compare" data-ds="spotify" hidden>Genres to compare (up to 12)
+      <select class="rl-multi" id="ctl-sgenres" multiple aria-label="Spotify genres to compare" data-draw="sgenres-options" data-source="spotify_bins"></select>
+      <span class="rl-hint">Ctrl- or ⌘-click to pick several</span>
+    </label>
+    <label class="rl-field" data-show="compare eras" hidden>Attribute
+      <select class="dash-select" id="ctl-attr" data-param="attr" aria-label="Attribute">
+        <option value="danceability">Danceability</option>
+        <option value="energy">Energy</option>
+        <option value="valence">Valence</option>
+        <option value="acousticness">Acousticness</option>
+        <option value="speechiness">Speechiness</option>
+        <option value="liveness">Liveness</option>
+        <option value="loudness">Loudness</option>
+        <option value="tempo">Tempo</option>
+      </select>
+    </label>
+  </div>
+
+  <section class="rl-card" id="ridgeline">
+    <p class="rl-note" id="small-note" hidden>Ridges with fewer than 15 songs show each song as a dot instead of a curve, since a curve from so few songs would look more certain than it is.</p>
+    <p class="rl-note" id="popularity-legend">Color: average popularity of the songs at each point along the curve, stretched to the range shown in this chart.</p>
+    <div class="rl-chart" data-draw="ridges" data-source="selection spotify_selection era_popularity"></div>
+  </section>
+
+  <details class="rl-details" id="how-to-read">
+    <summary>How to read this chart</summary>
+    <ul>
+      <li>Each curve is scaled to its own peak, so heights compare shapes, not song counts. The small tick on each ridge marks the median.</li>
+      <li>Tempo, loudness and popularity (used for color) were rescaled within each dataset: 0 is the lowest value in that dataset and 1 the highest, not a real BPM or decibel figure. Spotify popularity is its 0–100 score divided by 100. Because the two datasets were scaled separately, compare their shapes rather than exact values.</li>
+      <li>Key and mode are left out. Key has only 12 possible values and mode is 0 or 1, so a smooth curve would mislead.</li>
+      <li>The color inside each curve changes along it: at each value of the attribute, it shows the average popularity of that ridge’s songs near that value, from white (less popular) through light green to dark green (more popular). Where a curve is very thin there are few songs, so its color there rests on only a handful. Dots are colored by each song’s own popularity.</li>
+      <li>The color scale is stretched to the lowest and highest average popularity in the chart you’re looking at, so it changes as you switch filters: the same color can mean different popularity in two different views. Read the numbers on the legend. Thin tails of the curves (under 5% of their peak) are left out when setting the range. The number beside each era is its overall average.</li>
+      <li>Years are grouped into ranges because most single years have only a handful of songs. Nearly half of my 900 songs are from 2019.</li>
+      <li>The Spotify set has no release years, so the across-years view is only for my 900 songs. Its curves are drawn from 50 bins per genre and attribute. Some tracks are listed under more than one genre, so “All genres” counts them once per genre.</li>
+    </ul>
+  </details>
+</div>
+    <p class="jump"><a href="#keys">Skip to Études in twelve keys ↓</a></p>
+  </section>
+<script src="data/ridgelines.js"></script>
+<script>
+// Minimal runtime: data sources, calculated values, URL-free filter state, and redraw on change.
+window.dash = (() => {
+  const sources = {
+    songs: d3.csvParse(window.RIDGE_SONGS_CSV),
+    spotify_bins: window.RIDGE_BINS
+  };
+  const defaults = { dataset: 'songs', view: 'attributes', era: 'all', genre: 'all', attr: 'danceability',
+    sgenre: 'all', sgenres: ['pop', 'rock', 'hip-hop', 'latin', 'r-n-b', 'edm'] };
+  let params = { ...defaults };
+  const calcs = {}, draws = [], listeners = [];
+  let cache = {};
+  let scheduled = false;
+  const api = {
+    colors: ['#238b45'],
+    params: () => ({ ...params }),
+    setParams(o) { Object.assign(params, o); schedule(); },
+    resetParams() { params = { ...defaults }; schedule(); },
+    calc(id, spec) { calcs[id] = spec; },
+    data(id) {
+      if (sources[id]) return { status: 'ok', data: sources[id] };
+      const c = calcs[id];
+      if (!c) return { status: 'missing', data: [] };
+      if (!(id in cache)) cache[id] = c.fn(...c.inputs.map((i) => api.data(i).data));
+      return { status: 'ok', data: cache[id] };
+    },
+    onData(fn) { listeners.push(fn); },
+    draw(name, spec) { draws.push([name, spec]); },
+    setLink() {}
+  };
+  function render() {
+    scheduled = false;
+    cache = {};
+    listeners.forEach((fn) => fn());
+    draws.forEach(([name, spec]) => {
+      document.querySelectorAll(`[data-draw="${name}"]`).forEach((el) => {
+        if (typeof spec === 'function') { spec(el); return; }
+        if (!el.__made) { el.replaceChildren(); el.__made = spec.mount(el); }
+        spec.update(el, el.__made);
+      });
+    });
+  }
+  function schedule() { if (!scheduled) { scheduled = true; requestAnimationFrame(render); } }
+  window.addEventListener('resize', schedule);
+  window.addEventListener('DOMContentLoaded', schedule);
+  return api;
+})();
+</script>
+<script>
+dash.calc('selection', {
+  title: 'Songs in the current selection',
+  description: 'My 900 songs matching the chosen years (all years in the across-years view) and the chosen genre (all genres in the across-genres view).',
+  inputs: ['songs'],
+  fn: (songs) => {
+    const p = dash.params();
+    if ((p.dataset || 'songs') !== 'songs') return [];
+    const view = p.view || 'attributes';
+    const era = view === 'eras' ? 'all' : (p.era || 'all');
+    const year = (r) => Number(r.year);
+    const inEra = (r) => era === 'all' ? true
+      : era === 'pre2010' ? year(r) <= 2009
+      : era === '2010-2014' ? year(r) >= 2010 && year(r) <= 2014
+      : era === '2015-2017' ? year(r) >= 2015 && year(r) <= 2017
+      : era === '2018' ? year(r) === 2018
+      : year(r) >= 2019;
+    const useGenre = view !== 'compare' && p.genre && p.genre !== 'all';
+    return songs.filter((r) => inEra(r) && (!useGenre || r.genre === p.genre));
+  }
+});
+
+dash.calc('spotify_selection', {
+  title: 'Spotify bins in the current selection',
+  description: 'Binned Spotify tracks for the chosen genre, or the chosen genres in the across-genres view.',
+  inputs: ['spotify_bins'],
+  fn: (bins) => {
+    const p = dash.params();
+    if (p.dataset !== 'spotify') return [];
+    if (p.view === 'compare') {
+      const picked = new Set((p.sgenres || []).slice(0, 12));
+      return bins.filter((r) => picked.has(r.g));
+    }
+    const g = p.sgenre || 'all';
+    return g === 'all' ? bins : bins.filter((r) => r.g === g);
+  }
+});
+
+dash.calc('era_popularity', {
+  title: 'Average popularity by era',
+  description: 'Mean popularity (0–1) of the selected songs in each year range.',
+  inputs: ['selection'],
+  fn: (selection) => {
+    const eras = [
+      ['pre2010', '2009 and earlier', 0, 2009], ['2010-2014', '2010–2014', 2010, 2014],
+      ['2015-2017', '2015–2017', 2015, 2017], ['2018', '2018', 2018, 2018], ['2019-2020', '2019–2020', 2019, 9999]
+    ];
+    return eras.map(([era, label, from, to]) => {
+      const songs = selection.filter((r) => Number(r.year) >= from && Number(r.year) <= to);
+      return {
+        era, label, songs: songs.length,
+        avg_popularity: songs.length ? Math.round(d3.mean(songs, (r) => Number(r.popularity)) * 1000) / 1000 : null
+      };
+    });
+  }
+});
+
+dash.calc('selection_count', {
+  title: 'Number of songs in the selection',
+  description: 'Songs shown; for Spotify, tracks counted once per genre they are listed in.',
+  inputs: ['selection', 'spotify_selection'],
+  fn: (selection, spotifySelection) => dash.params().dataset === 'spotify'
+    ? d3.sum(spotifySelection.filter((r) => r.a === 'energy'), (r) => r.n)
+    : selection.length
+});
+</script>
+
+<script>
+// Controls: write params on change.
+document.querySelectorAll('select[data-param]').forEach((sel) => {
+  const name = sel.getAttribute('data-param');
+  sel.addEventListener('change', () => dash.setParams({ [name]: sel.value }));
+});
+document.querySelectorAll('#ctl-sgenres').forEach((sel) => {
+  sel.addEventListener('change', () => {
+    const picked = Array.from(sel.selectedOptions).map((o) => o.value).slice(0, 12);
+    if (picked.length) dash.setParams({ sgenres: picked });
+  });
+});
+
+dash.onData(() => {
+  const p = dash.params();
+  const ds = p.dataset || 'songs';
+  if (ds === 'spotify' && p.view === 'eras') { dash.setParams({ view: 'attributes' }); return; }
+  document.querySelectorAll('select[data-param]').forEach((sel) => {
+    const v = p[sel.getAttribute('data-param')];
+    if (v != null && document.activeElement !== sel && sel.querySelector('option')) sel.value = v;
+  });
+  document.querySelectorAll('option[data-only]').forEach((o) => { o.disabled = o.getAttribute('data-only') !== ds; });
+  const view = p.view || 'attributes';
+  document.querySelectorAll('[data-show], [data-ds]').forEach((el) => {
+    const okView = !el.hasAttribute('data-show') || el.getAttribute('data-show').split(' ').includes(view);
+    const okDs = !el.hasAttribute('data-ds') || el.getAttribute('data-ds').split(' ').includes(ds);
+    el.hidden = !(okView && okDs);
+  });
+});
+
+dash.draw('count', (el) => {
+  const c = dash.data('selection_count');
+  el.textContent = c.status === 'ok' && c.data != null ? d3.format(',')(c.data) : '—';
+});
+
+dash.draw('sgenre-options', (sel) => {
+  const b = dash.data('spotify_bins');
+  const genres = b.status === 'ok' ? Array.from(new Set(b.data.map((r) => r.g))).sort() : [];
+  sel.replaceChildren(new Option('All genres', 'all'), ...genres.map((g) => new Option(g, g)));
+  sel.value = dash.params().sgenre || 'all';
+});
+
+dash.draw('sgenres-options', (sel) => {
+  const b = dash.data('spotify_bins');
+  const genres = b.status === 'ok' ? Array.from(new Set(b.data.map((r) => r.g))).sort() : [];
+  const picked = new Set(dash.params().sgenres || []);
+  sel.replaceChildren(...genres.map((g) => { const o = new Option(g, g); o.selected = picked.has(g); return o; }));
+});
+
+window.RL = {
+  ATTRS: [
+    ['danceability', 'Danceability'], ['energy', 'Energy'], ['valence', 'Valence'],
+    ['acousticness', 'Acousticness'], ['speechiness', 'Speechiness'], ['liveness', 'Liveness'],
+    ['loudness', 'Loudness'], ['tempo', 'Tempo']
+  ],
+  GENRES: [['Pop', 'Pop'], ['Rap', 'Rap'], ['Latin', 'Latin'], ['R&b', 'R&B'], ['Rock', 'Rock'], ['Edm', 'EDM']],
+  ERAS: [
+    ['pre2010', '2009 and earlier', 0, 2009], ['2010-2014', '2010–2014', 2010, 2014],
+    ['2015-2017', '2015–2017', 2015, 2017], ['2018', '2018', 2018, 2018], ['2019-2020', '2019–2020', 2019, 9999]
+  ],
+  BINS: 50,
+  MIN_N: 15,
+  // White (less popular) to light green to dark green (more popular); values past either end are clamped.
+  popColor(lo, hi) {
+    const dark = getComputedStyle(document.documentElement).colorScheme.trim() === 'dark';
+    const ramp = d3.interpolateRgbBasis(dark ? ['#26302a', '#1f5a32', '#2f8a4a', '#62c17a', '#c7f0c9'] : ['#ffffff', '#c7e9c0', '#74c476', '#238b45', '#00441b']);
+    return (v) => ramp(Math.max(0, Math.min(1, (v - lo) / (hi - lo))));
+  },
+  // Points are {v value, w weight, ps summed popularity}; a song is weight 1, a bin is its track count.
+  bandwidth(points) {
+    const n = d3.sum(points, (q) => q.w);
+    const mean = d3.sum(points, (q) => q.v * q.w) / n;
+    const sd = Math.sqrt(d3.sum(points, (q) => q.w * (q.v - mean) ** 2) / Math.max(1, n - 1)) || 0.05;
+    return Math.min(0.12, Math.max(0.025, 1.06 * sd * Math.pow(n, -0.2)));
+  },
+  // Gaussian kernel density with reflection at 0 and 1, plus kernel-weighted average popularity at each point.
+  smooth(points, grid) {
+    const h = RL.bandwidth(points);
+    const k = (u) => Math.exp(-0.5 * u * u);
+    const dens = [], local = [];
+    grid.forEach((x) => {
+      let sw = 0, sp = 0;
+      for (const q of points) {
+        const kk = k((x - q.v) / h) + k((x + q.v) / h) + k((x - (2 - q.v)) / h);
+        sw += kk * q.w; sp += kk * q.ps;
+      }
+      dens.push(sw); local.push(sw > 0 ? sp / sw : null);
+    });
+    return { dens, local };
+  },
+  // Weighted quantile over points sorted by value.
+  quantile(sorted, n, t) {
+    let c = 0;
+    for (const q of sorted) { c += q.w; if (c >= t * n) return q.v; }
+    return sorted.length ? sorted[sorted.length - 1].v : null;
+  },
+  // Collapse Spotify bin rows into points.
+  binPoints(rows) {
+    const by = d3.rollup(rows, (rs) => ({ w: d3.sum(rs, (r) => +r.n), ps: d3.sum(rs, (r) => +r.p) }), (r) => +r.b);
+    return Array.from(by, ([b, s]) => ({ v: (b + 0.5) / RL.BINS, w: s.w, ps: s.ps }));
+  }
+};
+</script>
+
+<script>
+dash.draw('ridges', {
+  mount(el) {
+    const legend = d3.select(el).append('div').attr('class', 'rl-legend-bar');
+    const svg = d3.select(el).append('svg').attr('role', 'img');
+    const tip = d3.select(el).append('div').attr('class', 'rl-tip').style('opacity', 0);
+    return { legend, svg, tip };
+  },
+  update(el, made) {
+    const { legend, svg, tip } = made;
+    const p = dash.params();
+    const ds = p.dataset || 'songs';
+    const view = ds === 'spotify' && p.view === 'eras' ? 'attributes' : (p.view || 'attributes');
+    const src = dash.data(ds === 'spotify' ? 'spotify_selection' : 'selection');
+    const notes = document.querySelectorAll('#small-note');
+    d3.select(el).selectAll('.rl-msg').remove();
+    if (src.status !== 'ok') {
+      svg.selectAll('*').remove();
+      legend.selectAll('*').remove();
+      svg.attr('height', 0);
+      if (src.status === 'error' || src.status === 'missing') {
+        d3.select(el).append('div').attr('class', 'rl-msg').text('The data couldn’t be loaded, so the chart can’t be drawn.');
+      }
+      return;
+    }
+
+    const rows = src.data;
+    const color = dash.colors[0];
+    const attr = p.attr && p.attr !== 'popularity' ? p.attr : 'danceability';
+    const ep = dash.data('era_popularity');
+    const epRows = ep.status === 'ok' && ep.data ? ep.data : [];
+    const songPoints = (list, key) => list
+      .map((r) => ({ v: +r[key], w: 1, ps: +r.popularity, r }))
+      .filter((q) => Number.isFinite(q.v));
+
+    // Build the ridges: label and weighted points.
+    let ridges;
+    if (ds === 'spotify') {
+      if (view === 'compare') {
+        const picked = (p.sgenres || []).slice(0, 12);
+        ridges = picked.map((g) => ({ label: g, points: RL.binPoints(rows.filter((r) => r.g === g && r.a === attr)) }));
+      } else {
+        ridges = RL.ATTRS.map(([key, label]) => ({ label, points: RL.binPoints(rows.filter((r) => r.a === key)) }));
+      }
+    } else if (view === 'eras') {
+      ridges = RL.ERAS.map(([key, label, from, to]) => {
+        const er = epRows.find((e) => e.era === key);
+        return { label, raw: true, avg: er ? er.avg_popularity : null,
+          points: songPoints(rows.filter((r) => +r.year >= from && +r.year <= to), attr) };
+      });
+    } else if (view === 'compare') {
+      ridges = RL.GENRES.map(([key, label]) => ({ label, raw: true, points: songPoints(rows.filter((r) => r.genre === key), attr) }));
+    } else {
+      ridges = RL.ATTRS.map(([key, label]) => ({ label, raw: true, points: songPoints(rows, key) }));
+    }
+    ridges.forEach((d) => {
+      d.sorted = d.points.slice().sort((a, b) => a.v - b.v);
+      d.n = d3.sum(d.points, (q) => q.w);
+      d.median = d.n ? RL.quantile(d.sorted, d.n, 0.5) : null;
+      d.q1 = d.n ? RL.quantile(d.sorted, d.n, 0.25) : null;
+      d.q3 = d.n ? RL.quantile(d.sorted, d.n, 0.75) : null;
+      d.dots = d.raw && d.n > 0 && d.n < RL.MIN_N;
+    });
+    notes.forEach((n) => { n.hidden = !ridges.some((d) => d.dots); });
+
+    // Smooth each curve, then stretch the color scale to the popularity range on screen
+    // (ignoring each curve's thin tails, under 5% of its peak, where few songs sit).
+    const grid = d3.range(0, 1.0001, 0.01);
+    const shown = [];
+    ridges.forEach((d) => {
+      if (!d.n) return;
+      if (d.dots) { d.points.forEach((q) => shown.push(q.ps)); return; }
+      d.sm = RL.smooth(d.points, grid);
+      const peak = d3.max(d.sm.dens) || 1;
+      d.sm.local.forEach((v, k) => { if (v != null && d.sm.dens[k] >= peak * 0.05) shown.push(v); });
+    });
+    let lo = d3.min(shown) ?? 0, hi = d3.max(shown) ?? 1;
+    if (hi - lo < 0.02) { const mid = (lo + hi) / 2; lo = mid - 0.01; hi = mid + 0.01; }
+    lo = Math.floor(lo * 100) / 100; hi = Math.ceil(hi * 100) / 100;
+    const popCol = RL.popColor(lo, hi);
+
+    const width = Math.max(300, el.clientWidth);
+    const multi = view !== 'attributes';
+    const rowH = multi ? 92 : 72;
+    const overlap = 0.8;
+    const top = rowH * (overlap - 1) + 12;
+    const countText = (n) => d3.format(',')(n) + (n === 1 ? ' song' : ' songs');
+
+    svg.selectAll('*').remove();
+
+    // Measure label column.
+    const measure = svg.append('g');
+    let labelW = 0;
+    ridges.forEach((d) => {
+      const t = measure.append('text').attr('class', 'rl-label').text(d.label);
+      const s = measure.append('text').attr('class', 'rl-sub').text(countText(d.n));
+      if (d.avg != null) labelW = Math.max(labelW, measure.append('text').attr('class', 'rl-sub').text('avg pop. 0.00').node().getComputedTextLength());
+      labelW = Math.max(labelW, t.node().getComputedTextLength(), multi ? s.node().getComputedTextLength() : 0);
+    });
+    measure.remove();
+
+    if (!ridges.length) {
+      svg.attr('height', 0);
+      d3.select(el).append('div').attr('class', 'rl-msg').text('Pick at least one genre to compare.');
+      return;
+    }
+
+    // Color legend for this chart's range.
+    legend.selectAll('*').remove();
+    {
+      const lw = Math.min(300, Math.max(180, width * 0.4)), lh = 30;
+      const ls = legend.append('svg').attr('width', lw).attr('height', lh).attr('viewBox', `0 0 ${lw} ${lh}`)
+        .attr('role', 'img').attr('aria-label', 'Color scale for average popularity, from '  + lo + ' (pale) to ' + hi + ' (deep green)');
+      const lid = 'rl-lg-' + Math.random().toString(36).slice(2, 8);
+      const lg = ls.append('defs').append('linearGradient').attr('id', lid);
+      d3.range(0, 1.001, 0.1).forEach((t) => lg.append('stop').attr('offset', t * 100 + '%').attr('stop-color', popCol(lo + t * (hi - lo))));
+      ls.append('rect').attr('width', lw).attr('height', 10).attr('rx', 3).attr('fill', `url(#${lid})`).attr('stroke', 'var(--color-border-line)');
+      ls.append('text').attr('x', 0).attr('y', 26).text(d3.format('.2f')(lo));
+      ls.append('text').attr('x', lw).attr('y', 26).attr('text-anchor', 'end').text(d3.format('.2f')(hi));
+      ls.append('text').attr('x', lw / 2).attr('y', 26).attr('text-anchor', 'middle').text('popularity →');
+    }
+
+    const m = { top: Math.max(16, top), right: 16, bottom: 34, left: Math.ceil(labelW) + 18 };
+    const innerW = width - m.left - m.right;
+    const height = m.top + rowH * ridges.length + m.bottom;
+    svg.attr('width', width).attr('height', height).attr('viewBox', `0 0 ${width} ${height}`);
+
+    const x = d3.scaleLinear().domain([0, 1]).range([0, innerW]);
+    const defs = svg.append('defs');
+    const uid = Math.random().toString(36).slice(2, 8);
+    const g = svg.append('g').attr('transform', `translate(${m.left},${m.top})`);
+
+    const ticks = [0, 0.25, 0.5, 0.75, 1];
+    g.append('g').attr('class', 'rl-grid').selectAll('line').data(ticks).join('line')
+      .attr('x1', x).attr('x2', x).attr('y1', -m.top + 8).attr('y2', rowH * ridges.length);
+    g.append('g').attr('class', 'rl-axis').attr('transform', `translate(0,${rowH * ridges.length})`)
+      .call(d3.axisBottom(x).tickValues(ticks).tickFormat(d3.format('.2~f')).tickSizeOuter(0));
+
+    const peakH = rowH * overlap;
+    const gradient = true;
+
+    ridges.forEach((d, i) => {
+      const base = rowH * (i + 1);
+      const row = g.append('g').attr('class', 'rl-row');
+      const hasAvg = d.avg != null;
+      row.append('text').attr('class', 'rl-label').attr('x', -12).attr('y', base - (hasAvg ? 24 : multi ? 10 : 4))
+        .attr('text-anchor', 'end').text(d.label);
+      if (multi) {
+        row.append('text').attr('class', 'rl-sub').attr('x', -12).attr('y', base - (hasAvg ? 10 : -4))
+          .attr('text-anchor', 'end').text(countText(d.n));
+      }
+      if (hasAvg) {
+        row.append('text').attr('class', 'rl-sub').attr('x', -12).attr('y', base + 4)
+          .attr('text-anchor', 'end').text('avg pop. ' + d3.format('.2f')(d.avg));
+      }
+      row.append('line').attr('x1', 0).attr('x2', innerW).attr('y1', base).attr('y2', base)
+        .style('stroke', 'var(--cds-chart-axis)');
+
+      if (d.n === 0) {
+        row.append('text').attr('class', 'rl-sub').attr('x', 6).attr('y', base - 6).text('No songs in this selection');
+        return;
+      }
+      if (d.dots) {
+        d.points.forEach((q, j) => {
+          const jitter = ((j * 37) % 11) / 10; // deterministic spread, 0..1
+          row.append('circle')
+            .attr('cx', x(q.v)).attr('cy', base - 8 - jitter * (rowH * 0.45))
+            .attr('r', 4.5)
+            .style('fill', gradient ? popCol(q.ps) : color)
+            .style('stroke', gradient ? 'var(--color-fg)' : 'var(--color-panel)').style('stroke-width', gradient ? 1 : 2);
+        });
+      } else {
+        const sm = d.sm;
+        d.local = sm.local;
+        const max = d3.max(sm.dens) || 1;
+        const y = (v) => base - (v / max) * peakH;
+        const area = d3.area().x((_, k) => x(grid[k])).y0(base).y1((v) => y(v));
+        const line = d3.line().x((_, k) => x(grid[k])).y((v) => y(v));
+        row.append('path').attr('d', area(sm.dens)).style('fill', 'var(--color-panel)');
+        let fill = color;
+        if (gradient) {
+          const gid = 'rl-pg-' + uid + '-' + i;
+          const lg = defs.append('linearGradient').attr('id', gid).attr('gradientUnits', 'userSpaceOnUse')
+            .attr('x1', 0).attr('x2', innerW).attr('y1', 0).attr('y2', 0);
+          grid.forEach((gx, k) => {
+            if (k % 2 === 0 || k === grid.length - 1) {
+              lg.append('stop').attr('offset', (gx * 100) + '%').attr('stop-color', popCol(sm.local[k] ?? 0));
+            }
+          });
+          fill = `url(#${gid})`;
+        }
+        row.append('path').attr('d', area(sm.dens)).style('fill', fill).style('fill-opacity', gradient ? 0.95 : 0.28);
+        row.append('path').attr('d', line(sm.dens)).style('fill', 'none').style('stroke', gradient ? 'var(--color-fg)' : color)
+          .style('stroke-width', gradient ? 1.5 : 2).style('stroke-linejoin', 'round');
+      }
+      if (gradient) {
+        row.append('line').attr('x1', x(d.median)).attr('x2', x(d.median)).attr('y1', base).attr('y2', base - 10)
+          .style('stroke', 'var(--color-panel)').style('stroke-width', 5).style('stroke-linecap', 'round');
+      }
+      row.append('line').attr('x1', x(d.median)).attr('x2', x(d.median)).attr('y1', base).attr('y2', base - 10)
+        .style('stroke', 'var(--color-fg)').style('stroke-width', 2).style('stroke-linecap', 'round');
+    });
+
+    const attrName = (RL.ATTRS.find((a) => a.at(0) === attr) || ['', 'the attribute'])[1];
+    const dsName = ds === 'spotify' ? 'Spotify tracks' : 'my songs';
+    svg.attr('aria-label', view === 'eras'
+      ? 'Ridgeline chart of ' + attrName + ' for each year range, colored by popularity along each curve, on a 0 to 1 scale'
+      : view === 'compare'
+      ? 'Ridgeline chart of ' + attrName + ' for each genre in ' + dsName + ', on a 0 to 1 scale'
+      : 'Ridgeline chart of nine song attributes for ' + dsName + ', on a 0 to 1 scale');
+
+    // Hover layer: crosshair + tooltip.
+    const cross = g.append('line').attr('y1', -m.top + 8).attr('y2', rowH * ridges.length)
+      .style('stroke', 'var(--cds-chart-reference)').style('stroke-width', 1).style('opacity', 0);
+    const fmt = d3.format('.2f');
+    const hit = g.append('rect').attr('x', 0).attr('y', -m.top + 8).attr('width', innerW)
+      .attr('height', rowH * ridges.length + m.top - 8).style('fill', 'transparent');
+
+    const showTip = (event) => {
+      const [mx, my] = d3.pointer(event, g.node());
+      const xv = Math.max(0, Math.min(1, x.invert(mx)));
+      const i = Math.max(0, Math.min(ridges.length - 1, Math.floor(my / rowH)));
+      const d = ridges[i];
+      tip.selectAll('*').remove();
+      let dot = null;
+      if (d.dots) {
+        dot = d.points.reduce((best, q) => {
+          const dist = Math.abs(x(q.v) - mx);
+          return !best || dist < best.dist ? { q, dist } : best;
+        }, null);
+        if (dot && dot.dist > 14) dot = null;
+      }
+      if (dot) {
+        const r = dot.q.r;
+        tip.append('div').attr('class', 'rl-tip-h').text(r.track_name);
+        tip.append('div').attr('class', 'rl-tip-s').text(r.track_artist + ' · ' + r.genre + ' · ' + r.year);
+        tip.append('div').text((view === 'attributes' ? d.label : attrName) + ': ' + fmt(dot.q.v));
+        tip.append('div').text('Popularity ' + fmt(+r.popularity));
+        cross.attr('x1', x(dot.q.v)).attr('x2', x(dot.q.v)).style('opacity', 1);
+      } else {
+        tip.append('div').attr('class', 'rl-tip-h').text(d.label);
+        if (d.n === 0) {
+          tip.append('div').attr('class', 'rl-tip-s').text('No songs');
+        } else {
+          tip.append('div').attr('class', 'rl-tip-s').text(countText(d.n));
+          if (gradient && d.local) {
+            const lp = d.local[Math.round(xv * 100)];
+            if (lp != null) tip.append('div').text('Avg popularity near ' + fmt(xv) + ': ' + fmt(lp));
+          }
+          if (d.avg != null) tip.append('div').attr('class', 'rl-tip-s').text('Era average popularity ' + fmt(d.avg));
+          tip.append('div').text('Median ' + fmt(d.median));
+          tip.append('div').text('Middle half ' + fmt(d.q1) + '–' + fmt(d.q3));
+          const below = d3.sum(d.points.filter((q) => q.v <= xv), (q) => q.w) / d.n;
+          tip.append('div').attr('class', 'rl-tip-s').text(d3.format('.0%')(below) + ' of songs are at or below ' + fmt(xv));
+        }
+        cross.attr('x1', x(xv)).attr('x2', x(xv)).style('opacity', 1);
+      }
+      const box = el.getBoundingClientRect();
+      const [px, py] = d3.pointer(event, el);
+      const tw = tip.node().offsetWidth;
+      const left = px + 14 + tw > box.width ? px - 14 - tw : px + 14;
+      tip.style('left', Math.max(0, left) + 'px').style('top', Math.max(0, py - 10) + 'px').style('opacity', 1);
+    };
+    hit.on('pointermove', showTip).on('pointerdown', showTip)
+      .on('pointerleave', () => { tip.style('opacity', 0); cross.style('opacity', 0); });
+  }
+});
+</script>
+
+  <main class="sheet" id="keys">
+    <header class="score-head">
+      <div class="tempo" id="tempoMark">Allegro moderato</div>
+      <h1>Études in twelve keys</h1>
+      <div class="opus">arr. Spotify · Op. 89,741</div>
+    </header>
+    <p class="subtitle">Which keys do popular songs live in?</p>
+    <p class="lede">Every bar is one key on the circle of fifths. Neighbours share all but one note. Major keys sit on the outer ring, their relative minors inside.</p>
+
+    <div class="controls">
+      <div class="chips" id="chips" role="group" aria-label="Genre family"></div>
+      <label class="inline">Songs
+        <select id="threshold" aria-label="Popularity filter">
+          <option value="0">All songs</option>
+          <option value="4">Popularity 40+</option>
+          <option value="5">Popularity 50+</option>
+          <option value="6" selected>Hits: popularity 60+</option>
+          <option value="7">Popularity 70+</option>
+          <option value="8">Popularity 80+</option>
+        </select>
+      </label>
+      <label class="inline"><input type="checkbox" id="soundOn" /> Play the chord on click</label>
+    </div>
+
+    <div class="stage">
+      <div>
+        <svg id="wheel" viewBox="0 0 760 640" role="img" aria-labelledby="wheelDesc"><desc id="wheelDesc">Circle of fifths. Bar length shows the share of songs in each key.</desc></svg>
+        <div class="legend" id="legend"></div>
+        <p class="sample-note" id="sampleNote"></p>
+      </div>
+      <aside class="card" id="card" aria-live="polite"></aside>
+    </div>
+
+    <section class="notes" id="notes" aria-label="Findings"></section>
+
+    <section class="movements">
+      <h2>Movements</h2>
+      <p>The same wheel for each genre family. Pick one to open it above.</p>
+      <div class="grid" id="mvGrid"></div>
+    </section>
+
+    <footer class="about">
+      <p><b>Data.</b> Kaggle “Spotify Tracks Dataset” (maharshipandya): 114,000 rows across 114 genres, 89,741 unique tracks. A track listed under several genres counts once overall and once in each family it belongs to. Popularity is Spotify’s 0–100 score.</p>
+      <p><b>Careful.</b> Key and mode are Spotify’s automatic estimates, not a musician’s reading of the score. They often mix up a major key and its relative minor (C major and A minor use the same notes), so treat the major/minor split as approximate. The dataset has no chords and no release dates.</p>
+    </footer>
+  </main>
+</div>
+
+<script>
+  // the ridgeline color ramp depends on light/dark: redraw after a theme switch
+  document.getElementById("themeToggle").addEventListener("click", () => setTimeout(() => window.dash && dash.setParams({}), 0));
+  matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => window.dash && dash.setParams({}));
+</script>
+<script src="data/key_wheel.js"></script>
+<script>
+const D = window.KEY_DATA;
+const $ = id => document.getElementById(id);
+const NS = "http://www.w3.org/2000/svg";
+
+// circle-of-fifths order: position i -> pitch class (i * 7) mod 12
+const PC = i => (i * 7) % 12;
+const MAJ = ["C", "G", "D", "A", "E", "B", "F♯", "D♭", "A♭", "E♭", "B♭", "F"];
+const MIN = ["A", "E", "B", "F♯", "C♯", "G♯", "E♭", "B♭", "F", "C", "G", "D"]; // relative minors, same position
+const minorPos = pc => { for (let i = 0; i < 12; i++) if ((PC(i) + 9) % 12 === pc) return i; };
+const majorPos = pc => { for (let i = 0; i < 12; i++) if (PC(i) === pc) return i; };
+const ROMAN = ["I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX"];
+const TEMPO = { 0: "Tutti, every song", 4: "Andante, popularity 40+", 5: "Moderato, popularity 50+", 6: "Allegro, popularity 60+", 7: "Vivace, popularity 70+", 8: "Presto, popularity 80+" };
+
+const state = { family: "All", min: 6, pos: null, mode: 1 };   // pos = circle position, mode 1 major / 0 minor
+
+// ---------------------------------------------------------------- aggregation
+// returns { n, maj: [12], min: [12] } where each entry is {n, v, e, t} by circle position
+function agg(family, minBucket) {
+  const out = { n: 0, maj: [], min: [] };
+  for (let i = 0; i < 12; i++) { out.maj.push({ n: 0, v: 0, e: 0, t: 0 }); out.min.push({ n: 0, v: 0, e: 0, t: 0 }); }
+  for (const [k, m, b, n, v, e, t] of D.cells[family]) {
+    if (b < minBucket) continue;
+    const c = m === 1 ? out.maj[majorPos(k)] : out.min[minorPos(k)];
+    c.n += n; c.v += v; c.e += e; c.t += t; out.n += n;
+  }
+  return out;
+}
+const pct = (c, a) => a.n ? (c.n / a.n) * 100 : 0;
+const fmt1 = x => x.toFixed(1);
+const fmtN = x => x.toLocaleString("en-US");
+const majShare = a => a.n ? a.maj.reduce((s, c) => s + c.n, 0) / a.n * 100 : 0;
+const keyName = (pos, mode) => mode ? `${MAJ[pos]} major` : `${MIN[pos]} minor`;
+
+// ---------------------------------------------------------------- svg helpers
+function el(parent, tag, attrs = {}, text) {
+  const e = document.createElementNS(NS, tag);
+  for (const k in attrs) e.setAttribute(k, attrs[k]);
+  if (text != null) e.textContent = text;
+  parent.appendChild(e);
+  return e;
+}
+function polar(cx, cy, r, a) { return [cx + r * Math.sin(a), cy - r * Math.cos(a)]; }
+function band(cx, cy, r0, r1, a0, a1) {
+  if (r1 - r0 < 0.5) r1 = r0 + 0.5;
+  const [x0, y0] = polar(cx, cy, r0, a0), [x1, y1] = polar(cx, cy, r1, a0);
+  const [x2, y2] = polar(cx, cy, r1, a1), [x3, y3] = polar(cx, cy, r0, a1);
+  return `M${x0},${y0}L${x1},${y1}A${r1},${r1} 0 0 1 ${x2},${y2}L${x3},${y3}A${r0},${r0} 0 0 0 ${x0},${y0}Z`;
+}
+const STEP = Math.PI / 6;
+
+// ---------------------------------------------------------------- main wheel
+const G = { cx: 380, cy: 320, majR: 160, majL: 110, minR: 74, minL: 72 };
+
+function drawWheel() {
+  const svg = $("wheel");
+  [...svg.querySelectorAll(":scope > :not(desc)")].forEach(n => n.remove());
+  const a = agg(state.family, state.min);
+  const base = state.min > 0 ? agg(state.family, 0) : null;
+  const { cx, cy, majR, majL, minR, minL } = G;
+
+  // staff behind the disc, with clef and a final double bar
+  for (let i = 0; i < 5; i++) {
+    const y = cy - 60 + i * 30;
+    el(svg, "line", { x1: 0, y1: y, x2: 760, y2: y, stroke: "var(--staff)", "stroke-width": 1.2 });
+  }
+  el(svg, "text", { x: 6, y: cy + 62, "font-size": 160, fill: "var(--staff)", "font-family": "var(--music)" }, "𝄞");
+  el(svg, "line", { x1: 744, y1: cy - 60, x2: 744, y2: cy + 60, stroke: "var(--staff)", "stroke-width": 1.2 });
+  el(svg, "line", { x1: 752, y1: cy - 60, x2: 752, y2: cy + 60, stroke: "var(--staff)", "stroke-width": 4 });
+  el(svg, "circle", { cx, cy, r: 300, fill: "var(--paper)", stroke: "var(--ink)", "stroke-width": 0.8, "stroke-opacity": 0.35 });
+
+  // one scale for both rings so a minor bar and a major bar of the same length mean the same share
+  const all = [...a.maj, ...a.min].map(c => pct(c, a));
+  const bAll = base ? [...base.maj, ...base.min].map(c => pct(c, base)) : [];
+  const maxMaj = Math.max(...all.slice(0, 12), ...bAll.slice(0, 12), 0.1);
+  const maxMin = Math.max(...all.slice(12), ...bAll.slice(12), 0.1);
+  const px = Math.min(majL / maxMaj, minL / maxMin);
+
+  // gridrings every 2% (4% when bars are long), labelled in the gap between B♭ and F... at the top-left
+  const stepPct = px * 2 < 14 ? 4 : 2;
+  for (let s = stepPct; s * px <= majL + 1; s += stepPct) {
+    el(svg, "circle", { cx, cy, r: majR + s * px, fill: "none", stroke: "var(--staff)", "stroke-dasharray": "2 4" });
+    const [lx, ly] = polar(cx, cy, majR + s * px, -STEP / 2);
+    el(svg, "text", { x: lx - 2, y: ly + 4, "font-size": 13, fill: "var(--text-muted)", "text-anchor": "end", "font-family": "var(--sans)" }, s + "%");
+  }
+  for (let s = stepPct; s * px <= minL + 1; s += stepPct)
+    el(svg, "circle", { cx, cy, r: minR + s * px, fill: "none", stroke: "var(--staff)", "stroke-dasharray": "2 4" });
+  el(svg, "circle", { cx, cy, r: majR, fill: "none", stroke: "var(--ink)", "stroke-opacity": 0.3 });
+  el(svg, "circle", { cx, cy, r: minR, fill: "none", stroke: "var(--ink)", "stroke-opacity": 0.3 });
+
+  for (let i = 0; i < 12; i++) {
+    for (const mode of [1, 0]) {
+      const ring = mode ? a.maj : a.min, bring = base ? (mode ? base.maj : base.min) : null;
+      const r0 = mode ? majR : minR, sel = state.pos === i && state.mode === mode;
+      const g = el(svg, "g", { class: "wedge", tabindex: 0, role: "button",
+        "aria-label": `${keyName(i, mode)}: ${fmt1(pct(ring[i], a))} percent of songs` });
+      const am = i * STEP, w = STEP / 2, bw = STEP * 0.3;
+      // hit area / selection wash
+      el(g, "path", { d: band(cx, cy, r0, r0 + (mode ? majL : minL), am - w, am + w),
+        fill: sel ? "var(--accent)" : "transparent", "fill-opacity": sel ? 0.1 : 0 });
+      if (bring) el(g, "path", { d: band(cx, cy, r0, r0 + pct(bring[i], base) * px, am - bw - 0.04, am + bw + 0.04),
+        fill: "none", stroke: "var(--ink)", "stroke-width": 1, "stroke-opacity": 0.55, "stroke-dasharray": "3 2" });
+      const len = pct(ring[i], a) * px;
+      el(g, "path", { class: "hit", d: band(cx, cy, r0, r0 + len, am - bw, am + bw),
+        fill: sel ? "var(--accent)" : "var(--ink)", opacity: mode ? 0.88 : 0.62 });
+      // note head at the tip
+      const [nx, ny] = polar(cx, cy, r0 + len + 7, am);
+      el(g, "ellipse", { cx: nx, cy: ny, rx: 6, ry: 4.3, fill: sel ? "var(--accent)" : "var(--ink)", transform: `rotate(-22 ${nx} ${ny})` });
+      // labels
+      if (mode) {
+        const [lx, ly] = polar(cx, cy, majR + majL + 30, am);
+        el(g, "text", { x: lx, y: ly + 8, "text-anchor": "middle", "font-size": 24, "font-weight": sel ? 500 : 400,
+          fill: sel ? "var(--accent)" : "var(--ink)" }, MAJ[i]);
+      } else {
+        const [lx, ly] = polar(cx, cy, 60, am);
+        el(g, "text", { x: lx, y: ly + 5, "text-anchor": "middle", "font-size": 14, "font-style": "italic",
+          fill: sel ? "var(--accent)" : "var(--text-secondary)" }, MIN[i].toLowerCase());
+      }
+      g.addEventListener("click", () => select(i, mode, true));
+      g.addEventListener("keydown", ev => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); select(i, mode, true); } });
+    }
+  }
+  // centre: major share
+  el(svg, "text", { x: cx, y: cy + 4, "text-anchor": "middle", "font-size": 28 }, Math.round(majShare(a)) + "%");
+  el(svg, "text", { x: cx, y: cy + 22, "text-anchor": "middle", "font-size": 14, "font-style": "italic", fill: "var(--text-secondary)" }, "major");
+
+  // legend + sample warning
+  const lbl = state.min ? `Songs with popularity ${state.min * 10}+` : "All songs";
+  $("legend").innerHTML =
+    `<span><span class="sw" style="background:var(--ink);opacity:.88"></span>${lbl} (${fmtN(a.n)})</span>` +
+    (base ? `<span><span class="sw" style="border:1px dashed var(--ink)"></span>Every song in this genre family, any popularity</span>` : "") +
+    `<span>Both rings use the same scale</span>`;
+  $("sampleNote").textContent = a.n < 400 ? `Only ${fmtN(a.n)} songs here, so small differences between keys are mostly noise.` : "";
+  $("tempoMark").textContent = TEMPO[state.min];
+  return { a, base };
+}
+
+// ---------------------------------------------------------------- key signature on a mini staff
+// staff steps from the bottom line (E4 = 0); standard treble positions for sharps and flats
+const SHARP_STEPS = [8, 5, 9, 6, 3, 7, 4], FLAT_STEPS = [4, 7, 3, 6, 2, 5, 1];
+function drawSignature(pos) {
+  const svg = $("sig"); svg.innerHTML = "";
+  const gap = 12, bottom = 70, left = 4;
+  for (let i = 0; i < 5; i++) el(svg, "line", { x1: left, y1: bottom - i * gap, x2: 296, y2: bottom - i * gap, stroke: "currentColor", "stroke-opacity": 0.55 });
+  el(svg, "text", { x: left + 2, y: bottom - 2, "font-size": 62, fill: "currentColor", "font-family": "var(--music)" }, "𝄞");
+  const sharps = pos <= 6 ? pos : 0, flats = pos > 6 ? 12 - pos : 0;
+  const steps = sharps ? SHARP_STEPS.slice(0, sharps) : FLAT_STEPS.slice(0, flats);
+  steps.forEach((s, j) => el(svg, "text", { x: 56 + j * 16, y: bottom - s * gap / 2 + (sharps ? 7 : 4), "font-size": 26,
+    fill: "currentColor", "font-family": "var(--serif)", "text-anchor": "middle" }, sharps ? "♯" : "♭"));
+  const n = sharps || flats;
+  return n === 0 ? "No sharps or flats" : `${n} ${sharps ? "sharp" : "flat"}${n > 1 ? "s" : ""}`;
+}
+
+// ---------------------------------------------------------------- key card
+function drawCard(a, base) {
+  const { pos, mode } = state, ring = mode ? a.maj : a.min, c = ring[pos];
+  const relName = mode ? `Relative minor: ${MIN[pos]} minor` : `Relative major: ${MAJ[pos]} major`;
+  const share = pct(c, a);
+  let vs = "";
+  if (base) {
+    const b = pct((mode ? base.maj : base.min)[pos], base), d = share - b;
+    vs = `${fmt1(b)}% of every song in this genre family. ` +
+      (Math.abs(d) < 0.3 ? "About the same for popular songs." : `Popular songs use it ${d > 0 ? "more" : "less"} (${d > 0 ? "+" : "−"}${fmt1(Math.abs(d))} points).`);
+  }
+  const card = $("card");
+  card.innerHTML = `
+    <h2>${keyName(pos, mode)}</h2>
+    <div class="rel">${relName}</div>
+    <svg id="sig" viewBox="0 0 300 92" aria-hidden="true"></svg>
+    <div class="sigcap" id="sigcap"></div>
+    <div class="share">${fmt1(share)}%<small>of ${fmtN(a.n)} songs</small></div>
+    <div class="vs">${vs}</div>
+    <div class="stats">
+      <div class="stat"><b>${c.n ? Math.round(c.v / c.n * 100) : "–"}</b><span>Mood</span></div>
+      <div class="stat"><b>${c.n ? Math.round(c.e / c.n * 100) : "–"}</b><span>Energy</span></div>
+      <div class="stat"><b>${c.n ? Math.round(c.t / c.n) : "–"}</b><span>Avg. BPM</span></div>
+    </div>
+    <div class="sigcap">Mood and energy are Spotify scores from 0 to 100.</div>
+    <button id="playBtn">▶ Play ${keyName(pos, mode)} chord</button>
+    <h3>Most popular songs in this key</h3>
+    <ul class="songs" id="songs"></ul>`;
+  $("sigcap").textContent = drawSignature(pos);
+  $("playBtn").addEventListener("click", () => playChord(PC(pos), mode, pos));
+  const ul = $("songs");
+  const list = (D.examples[state.family][`${mode ? PC(pos) : (PC(pos) + 9) % 12}-${mode}`] || []);
+  for (const [title, artist, pop, id] of list) {
+    const li = document.createElement("li");
+    const a1 = document.createElement("a");
+    a1.href = `https://open.spotify.com/track/${id}`; a1.target = "_blank"; a1.rel = "noopener";
+    a1.textContent = title;
+    const ar = document.createElement("span"); ar.className = "artist"; ar.textContent = artist;
+    const d = document.createElement("div"); d.append(a1, ar);
+    const p = document.createElement("span"); p.className = "pop"; p.textContent = `pop. ${pop}`;
+    li.append(d, p); ul.appendChild(li);
+  }
+  if (!list.length) ul.innerHTML = "<li>No songs in this key for this genre.</li>";
+}
+
+// ---------------------------------------------------------------- findings
+function drawNotes(a, base) {
+  const keys = [];
+  for (let i = 0; i < 12; i++) { keys.push([i, 1, pct(a.maj[i], a)]); keys.push([i, 0, pct(a.min[i], a)]); }
+  keys.sort((x, y) => y[2] - x[2]);
+  const top = keys.slice(0, 3), low = keys[keys.length - 1];
+  const M = majShare(a), bM = base ? majShare(base) : null;
+  const sum = arr => arr.reduce((s, c) => ({ n: s.n + c.n, v: s.v + c.v }), { n: 0, v: 0 });
+  const mj = sum(a.maj), mn = sum(a.min);
+  const vMaj = Math.round(mj.v / mj.n * 100), vMin = Math.round(mn.v / mn.n * 100), dv = vMaj - vMin;
+  const moodLine = Math.abs(dv) <= 2
+    ? `Minor isn’t sadder here: about the same mood either way.`
+    : dv > 0 ? `Minor songs do sound a bit sadder here.` : `Minor songs actually score happier here.`;
+  $("notes").innerHTML = `
+    <div class="note"><div class="mark">f · most played</div>
+      <p><b>${keyName(top[0][0], top[0][1])}</b> leads with ${fmt1(top[0][2])}% of songs, then ${keyName(top[1][0], top[1][1])} and ${keyName(top[2][0], top[2][1])}.
+      The rarest is ${keyName(low[0], low[1])} (${fmt1(low[2])}%).</p></div>
+    <div class="note"><div class="mark">mf · major or minor</div>
+      <p><b>${Math.round(M)}% major</b>, ${Math.round(100 - M)}% minor${bM != null ? `. Across every song in this genre family it’s ${Math.round(bM)}% major` : ""}.</p>
+      <div class="mm" aria-hidden="true"><div style="width:${M}%"></div></div></div>
+    <div class="note"><div class="mark">p · does minor mean sad?</div>
+      <p><b>${vMin} vs ${vMaj}</b> on Spotify’s mood score (minor vs major). ${moodLine}</p></div>`;
+}
+
+// ---------------------------------------------------------------- movements (small multiples)
+function drawMovements() {
+  const grid = $("mvGrid"); grid.innerHTML = "";
+  // one shared scale across all small wheels so they can be compared
+  const aggs = D.families.slice(1).map(([fam]) => agg(fam, state.min));
+  const maxS = Math.max(...aggs.flatMap(a => [...a.maj, ...a.min].map(c => pct(c, a))));
+  const px = 44 / maxS;
+  D.families.slice(1).forEach(([fam], idx) => {
+    const a = aggs[idx];
+    const b = document.createElement("button");
+    b.className = "mv"; b.setAttribute("aria-pressed", state.family === fam);
+    const svg = document.createElementNS(NS, "svg"); svg.setAttribute("viewBox", "0 0 200 200"); svg.setAttribute("aria-hidden", "true");
+    const cx = 100, cy = 100;
+    el(svg, "circle", { cx, cy, r: 50, fill: "none", stroke: "var(--ink)", "stroke-opacity": 0.25 });
+    el(svg, "circle", { cx, cy, r: 24, fill: "none", stroke: "var(--ink)", "stroke-opacity": 0.25 });
+    let best = [0, 1, 0];
+    for (let i = 0; i < 12; i++) for (const mode of [1, 0]) {
+      const s = pct((mode ? a.maj : a.min)[i], a); if (s > best[2]) best = [i, mode, s];
+      const r0 = mode ? 50 : 24, am = i * STEP;
+      el(svg, "path", { d: band(cx, cy, r0, r0 + Math.min(s * px, mode ? 48 : 25), am - 0.15, am + 0.15), fill: "var(--ink)", opacity: mode ? 0.88 : 0.6 });
+    }
+    el(svg, "text", { x: cx, y: 12, "text-anchor": "middle", "font-size": 13, fill: "var(--text-muted)", "font-family": "var(--serif)" }, "C");
+    el(svg, "text", { x: cx, y: cy + 5, "text-anchor": "middle", "font-size": 15, fill: "var(--ink)", "font-family": "var(--serif)" }, Math.round(majShare(a)) + "%");
+    b.appendChild(svg);
+    const t = document.createElement("span"); t.className = "t"; t.textContent = `${ROMAN[idx]}. ${fam}`;
+    const s = document.createElement("span"); s.className = "s";
+    s.textContent = `${Math.round(majShare(a))}% major · top: ${keyName(best[0], best[1])}`;
+    b.append(t, s);
+    b.setAttribute("aria-label", `${fam}: ${s.textContent}`);
+    b.addEventListener("click", () => { setFamily(fam); window.scrollTo({ top: 0, behavior: "smooth" }); });
+    grid.appendChild(b);
+  });
+}
+
+// ---------------------------------------------------------------- chips
+function drawChips() {
+  const box = $("chips"); box.innerHTML = "";
+  D.families.forEach(([fam], idx) => {
+    const b = document.createElement("button");
+    b.className = "chip"; b.textContent = idx === 0 ? "Tutti · all genres" : `${ROMAN[idx - 1]}. ${fam}`;
+    b.setAttribute("aria-pressed", state.family === fam);
+    b.addEventListener("click", () => setFamily(fam));
+    box.appendChild(b);
+  });
+}
+
+// ---------------------------------------------------------------- sound: a rolled triad
+let audio;
+function playChord(pc, mode, pos) {
+  try {
+    audio = audio || new (window.AudioContext || window.webkitAudioContext)();
+    if (audio.state === "suspended") audio.resume();
+    const rootPc = mode ? pc : (pc + 9) % 12;
+    let f0 = 261.63 * Math.pow(2, rootPc / 12); if (rootPc >= 7) f0 /= 2;
+    const ivs = [0, mode ? 4 : 3, 7, 12], t0 = audio.currentTime + 0.02;
+    ivs.forEach((iv, j) => {
+      const f = f0 * Math.pow(2, iv / 12), t = t0 + j * 0.045;
+      [[1, "triangle", 0.16], [2, "sine", 0.05], [3, "sine", 0.02]].forEach(([h, type, gain]) => {
+        const o = audio.createOscillator(), g = audio.createGain();
+        o.type = type; o.frequency.value = f * h;
+        g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(gain, t + 0.01);
+        g.gain.exponentialRampToValueAtTime(0.0001, t + 2.2 / h);
+        o.connect(g).connect(audio.destination); o.start(t); o.stop(t + 2.4);
+      });
+    });
+  } catch (e) { /* no audio support: stay silent */ }
+}
+
+// ---------------------------------------------------------------- state changes
+function topKey(a) {
+  let best = [0, 1, -1];
+  for (let i = 0; i < 12; i++) for (const m of [1, 0]) { const s = pct((m ? a.maj : a.min)[i], a); if (s > best[2]) best = [i, m, s]; }
+  return best;
+}
+function render() {
+  const { a, base } = drawWheel();
+  drawCard(a, base); drawNotes(a, base); drawMovements(); drawChips();
+}
+function select(pos, mode, fromClick) {
+  state.pos = pos; state.mode = mode;
+  const focusLabel = document.activeElement && document.activeElement.getAttribute("aria-label");
+  render();
+  if (fromClick && $("soundOn").checked) playChord(PC(pos), mode, pos);
+  if (focusLabel) {  // keep keyboard focus on the same wedge after redraw
+    const same = [...document.querySelectorAll("#wheel .wedge")].find(g => g.getAttribute("aria-label").startsWith(keyName(pos, mode) + ":"));
+    if (same) same.focus();
+  }
+}
+function setFamily(fam) {
+  state.family = fam;
+  const [p, m] = topKey(agg(fam, state.min)); state.pos = p; state.mode = m;
+  render();
+}
+$("threshold").addEventListener("change", e => { state.min = +e.target.value; render(); });
+
+// ---------------------------------------------------------------- theme switch (shared with the explorer)
+function currentTheme() { return document.documentElement.dataset.theme || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light"); }
+function syncThemeButton() {
+  const dark = currentTheme() === "dark";
+  $("themeIco").textContent = dark ? "☀" : "☾"; $("themeLbl").textContent = dark ? "Light" : "Dark";
+  $("themeToggle").setAttribute("aria-label", dark ? "Switch to light mode" : "Switch to dark mode");
+}
+$("themeToggle").addEventListener("click", () => {
+  const next = currentTheme() === "dark" ? "light" : "dark";
+  document.documentElement.dataset.theme = next;
+  try { localStorage.setItem("cb-theme", next); } catch (e) {}
+  syncThemeButton();
+});
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change", syncThemeButton);
+syncThemeButton();
+
+setFamily("All");
+</script>
+</body>
+</html>

@@ -110,6 +110,12 @@
   /* Theme switch */
   .theme-toggle { position: absolute; top: 16px; right: 0; z-index: 2; display: inline-flex; align-items: center; gap: 8px; border-radius: 999px; padding: 6px 14px; font-size: var(--fs-small); background: var(--surface-1); }
   .theme-toggle .ico { font-size: 16px; line-height: 1; }
+  .brand-link { margin: -4px 0 8px; font-size: var(--fs-small); }
+  .brand-link a { color: var(--text-secondary); text-underline-offset: 3px; }
+  .brand-link a:hover { color: var(--text-primary); }
+  .brand-link span { margin: 0 8px; color: var(--text-muted); }
+  a.artist { color: inherit; text-decoration: underline; text-decoration-color: var(--text-muted); text-underline-offset: 2px; }
+  a.artist:hover { color: var(--text-primary); text-decoration-color: currentColor; }
 
   /* Music staff decoration behind the hero */
   .hero { position: relative; }
@@ -248,9 +254,35 @@
   .legend { display: flex; gap: 14px; font-size: var(--fs-small); color: var(--text-secondary); flex-wrap: wrap; }
   .legend span { display: inline-flex; align-items: center; gap: 6px; }
   .legend i { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
-  .axis-select { font-size: var(--fs-small); color: var(--text-secondary); display: flex; gap: 8px; align-items: center; }
   select { font: inherit; padding: 4px 6px; border-radius: 6px; border: 1px solid var(--border); background: var(--surface-2); color: var(--text-primary); }
-  #scatter { width: 100%; height: auto; display: block; }
+  .zoom-tools { display: flex; gap: 4px; align-items: center; flex-wrap: wrap; }
+  .zoom-tools button { font-size: var(--fs-small); padding: 4px 10px; }
+  .zoom-tools button.icon { width: 32px; padding: 4px 0; font-size: 18px; line-height: 1; font-weight: 600; }
+  .zoom-tools button:disabled { opacity: .45; cursor: default; }
+  .axis-ctl { display: flex; align-items: center; gap: 8px; font-size: var(--fs-small); color: var(--text-secondary); flex-wrap: wrap; }
+  .axis-ctl label { font-weight: 600; color: var(--text-primary); }
+  .axis-ctl .arrow { color: var(--text-muted); }
+  .axis-ctl select {
+    font-size: var(--fs-body); font-weight: 600; padding: 6px 30px 6px 10px; border-radius: 8px; cursor: pointer;
+    border: 1.5px solid var(--text-muted); appearance: none; -webkit-appearance: none;
+    background: var(--surface-2) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8'%3E%3Cpath d='M1 1l5 5 5-5' fill='none' stroke='%23888' stroke-width='2'/%3E%3C/svg%3E") no-repeat right 10px center;
+  }
+  .axis-ctl select:hover { border-color: var(--text-primary); }
+  .axis-ctl select:focus-visible { outline: 2px solid var(--series-1); outline-offset: 1px; }
+  .axis-ctl .swap { font-size: var(--fs-small); padding: 4px 10px; }
+  .axis-y { margin-bottom: 4px; }
+  .axis-x { justify-content: center; margin-top: 2px; }
+  .map-wrap { position: relative; }
+  .zoom-hint {
+    position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; pointer-events: none;
+    background: rgba(0,0,0,.45); color: #fff; font-weight: 600; border-radius: 8px; opacity: 0; transition: opacity .2s;
+  }
+  .zoom-hint.show { opacity: 1; }
+  .map-help { margin: 8px 0 0; font-size: var(--fs-small); color: var(--text-muted); text-align: center; }
+  #scatter { width: 100%; height: auto; display: block; user-select: none; -webkit-user-select: none; }
+  #scatter:focus-visible { outline: 2px solid var(--series-1); outline-offset: 2px; border-radius: 6px; }
+  #scatter.zoomed { cursor: grab; touch-action: none; }
+  #scatter.panning { cursor: grabbing; }
   .tooltip {
     position: fixed; pointer-events: none; z-index: 50; display: none;
     background: var(--surface-1); color: var(--text-primary); border: 1px solid var(--border);
@@ -351,6 +383,7 @@
     </g>
   </svg>
   <p class="brand"><span class="clef" aria-hidden="true">𝄞</span>Chart Busters · Music Style Explorer</p>
+  <p class="brand-link"><a href="artist-profiles.html">Artist profiles →</a><span aria-hidden="true">·</span><a href="key-wheel.html">How songs are distributed, and which keys they use →</a></p>
   <h1>What's your favorite song?</h1>
   <div class="search-row">
     <input type="search" id="search" placeholder="🔍  Song or artist, e.g. Blinding Lights" autocomplete="off" aria-label="What's your favorite song?" />
@@ -403,18 +436,33 @@
           <h2>Song map</h2>
           <p class="sub">Click a dot to explore from that song.</p>
         </div>
-        <div class="axis-select">
-          X <select id="xAxis"></select>
-          Y <select id="yAxis"></select>
+        <div class="zoom-tools" role="group" aria-label="Zoom the song map">
+          <button class="ghost icon" id="zoomOut" title="Zoom out" aria-label="Zoom out">−</button>
+          <button class="ghost icon" id="zoomIn" title="Zoom in" aria-label="Zoom in">+</button>
+          <button class="ghost" id="zoomFit" title="Zoom in on the recommended songs">Zoom to matches</button>
+          <button class="ghost" id="zoomReset" title="Show the whole map" disabled>Reset</button>
         </div>
       </div>
-      <div class="legend" style="margin-bottom:6px">
+      <div class="legend" style="margin-bottom:10px">
         <span><i style="background:var(--dot-bg)"></i>Other songs</span>
         <span><i style="background:var(--match)"></i>Recommended</span>
         <span><i style="background:transparent;border:2.5px solid var(--baseline)"></i>Searched song</span>
         <span><i style="background:transparent;border:1.5px dashed var(--change);border-radius:2px"></i>Your target range</span>
       </div>
-      <svg id="scatter" viewBox="0 0 760 420" role="img" aria-label="Scatter plot of songs"></svg>
+      <div class="axis-ctl axis-y">
+        <label for="yAxis"><span class="arrow" aria-hidden="true">↑</span> Up the side</label>
+        <select id="yAxis" title="Change what the vertical axis shows"></select>
+        <button class="ghost swap" id="swapAxes" title="Swap the two axes" aria-label="Swap X and Y axes">⇅ Swap</button>
+      </div>
+      <div class="map-wrap">
+        <svg id="scatter" viewBox="0 0 760 420" role="img" aria-label="Scatter plot of songs" tabindex="0"></svg>
+        <div class="zoom-hint" id="zoomHint" aria-hidden="true"></div>
+      </div>
+      <div class="axis-ctl axis-x">
+        <label for="xAxis">Along the bottom <span class="arrow" aria-hidden="true">→</span></label>
+        <select id="xAxis" title="Change what the horizontal axis shows"></select>
+      </div>
+      <p class="map-help" id="mapHelp"></p>
     </div>
   </section>
 
@@ -485,6 +533,7 @@
 <div class="toast" id="toast"></div>
 
 <script src="data/spotify_songs.js"></script>
+<script src="data/artist_names.js"></script>
 <script>
 // ---------------------------------------------------------------- data
 // Data: data/spotify_songs.js (Kaggle "Spotify Most Popular Songs Dataset", 900 tracks).
@@ -519,6 +568,11 @@ const state = {
   steps: new Set(),
 };
 const $ = id => document.getElementById(id);
+// Artists with a page in artist-profiles.html (20+ tracks); others stay plain text.
+const PROFILE_SET = new Set((window.ARTIST_PROFILES || []).map(n => n.toLowerCase()));
+const artistHTML = name => PROFILE_SET.has(name.toLowerCase())
+  ? `<a class="artist" href="artist-profiles.html?artist=${encodeURIComponent(name)}" title="Open ${name.replace(/"/g, "&quot;")}'s artist profile">${name}</a>`
+  : name;
 
 function markStep(s) {
   state.steps.add(s);
@@ -700,7 +754,7 @@ function setBaseline(s, isReset) {
   state.baseline = s;
   $("search").value = ""; $("suggest").style.display = "none";
   $("baselinePill").style.display = "flex";
-  $("baselineText").innerHTML = `<b>${s.title}</b>&nbsp;· ${s.artist}`;
+  $("baselineText").innerHTML = `<b>${s.title}</b>&nbsp;· ${artistHTML(s.artist)}`;
   ATTRS.forEach(a => state.enabled[a.key] = true);
   const vals = {}; ATTRS.forEach(a => vals[a.key] = norm(s, a.key));
   markStep("search");
@@ -773,7 +827,7 @@ function renderResults() {
       <button class="play art ${playing ? "playing" : ""}" data-play="${s.id}" style="background-image:url('${ART(s.art, "sm")}')" aria-label="${playing ? "Close player for" : "Play"} ${s.title}">${playing ? "■" : "▶"}</button>
       <div style="min-width:0">
         <div class="title">${s.title}</div>
-        <div class="meta">${s.artist} · ${s.year} · ${s.genre} · popularity ${s.pop}</div>
+        <div class="meta">${artistHTML(s.artist)} · ${s.year} · ${s.genre} · popularity ${s.pop}</div>
       </div>
       <div style="text-align:right">
         <div class="match">${score}% match</div>
@@ -808,58 +862,199 @@ function toggleChosen(s) {
 }
 
 // ---------------------------------------------------------------- scatter (background map)
-const AX_OPTS = ATTRS.map(a => a.key);
 let xKey = "energy", yKey = "mood";
-function initAxes() {
-  [["xAxis", "energy"], ["yAxis", "mood"]].forEach(([id, def]) => {
-    $(id).innerHTML = ATTRS.map(a => `<option value="${a.key}" ${a.key === def ? "selected" : ""}>${a.label}</option>`).join("");
-    $(id).onchange = e => { if (id === "xAxis") xKey = e.target.value; else yKey = e.target.value; renderScatter(); };
+const attrOf = k => ATTRS.find(a => a.key === k);
+function fillAxisSelects() {
+  [["xAxis", xKey], ["yAxis", yKey]].forEach(([id, cur]) => {
+    $(id).innerHTML = ATTRS.map(a => `<option value="${a.key}" ${a.key === cur ? "selected" : ""}>${a.label} (${a.lo} → ${a.hi})</option>`).join("");
   });
 }
+function setAxes(nx, ny) {
+  xKey = nx; yKey = ny; fillAxisSelects();
+  view = { ...FULL_VIEW }; renderScatter();
+}
+function initAxes() {
+  fillAxisSelects();
+  $("xAxis").onchange = e => setAxes(e.target.value, yKey);
+  $("yAxis").onchange = e => setAxes(xKey, e.target.value);
+  $("swapAxes").onclick = () => setAxes(yKey, xKey);
+  initZoom();
+}
+
+// ---- zoom / pan state (in data units, 0–100 on each axis)
+const PLOT = { W: 760, H: 420, L: 52, R: 16, T: 12, B: 46 };
+const FULL_VIEW = { x0: 0, x1: 100, y0: 0, y1: 100 };
+const MIN_SPAN = 6;
+let view = { ...FULL_VIEW };
+const spanX = () => view.x1 - view.x0, spanY = () => view.y1 - view.y0;
+const zoomLevel = () => Math.max(100 / spanX(), 100 / spanY());
+const isZoomed = () => zoomLevel() > 1.01;
+function clampView(v) {
+  const sx = Math.min(100, Math.max(MIN_SPAN, v.x1 - v.x0)), sy = Math.min(100, Math.max(MIN_SPAN, v.y1 - v.y0));
+  const x0 = Math.min(100 - sx, Math.max(0, v.x0)), y0 = Math.min(100 - sy, Math.max(0, v.y0));
+  return { x0, x1: x0 + sx, y0, y1: y0 + sy };
+}
+let viewAnim = 0;
+function animateView(target, ms = 260) {
+  target = clampView(target);
+  cancelAnimationFrame(viewAnim);
+  if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) { view = target; renderScatter(); return; }
+  const from = { ...view }, t0 = performance.now();
+  const step = now => {
+    const k = Math.min(1, (now - t0) / ms), e = 1 - Math.pow(1 - k, 3);
+    for (const key in from) view[key] = from[key] + (target[key] - from[key]) * e;
+    renderScatter();
+    if (k < 1) viewAnim = requestAnimationFrame(step);
+  };
+  viewAnim = requestAnimationFrame(step);
+}
+// zoom by `f` (<1 = in) around a data point; defaults to the centre of the view
+function zoomBy(f, cx = (view.x0 + view.x1) / 2, cy = (view.y0 + view.y1) / 2, animate = true) {
+  const t = { x0: cx - (cx - view.x0) * f, x1: cx + (view.x1 - cx) * f, y0: cy - (cy - view.y0) * f, y1: cy + (view.y1 - cy) * f };
+  if (animate) animateView(t); else { view = clampView(t); scheduleScatter(); }
+}
+function zoomToMatches() {
+  const pts = [...lastMatchIds].map(id => SONGS[id]);
+  if (state.baseline) pts.push(state.baseline);
+  if (!pts.length) { toast("No recommended songs to zoom to yet."); return; }
+  const xs = pts.map(s => norm(s, xKey)), ys = pts.map(s => norm(s, yKey));
+  const pad = 4, cx = (Math.min(...xs) + Math.max(...xs)) / 2, cy = (Math.min(...ys) + Math.max(...ys)) / 2;
+  const sx = Math.max(MIN_SPAN * 1.5, Math.max(...xs) - Math.min(...xs) + pad * 2);
+  const sy = Math.max(MIN_SPAN * 1.5, Math.max(...ys) - Math.min(...ys) + pad * 2);
+  animateView({ x0: cx - sx / 2, x1: cx + sx / 2, y0: cy - sy / 2, y1: cy + sy / 2 });
+}
+let scatterRaf = 0;
+function scheduleScatter() { if (!scatterRaf) scatterRaf = requestAnimationFrame(() => { scatterRaf = 0; renderScatter(); }); }
+
+// screen → svg → data coordinates
+function svgPoint(e) {
+  const r = $("scatter").getBoundingClientRect();
+  return [(e.clientX - r.left) * PLOT.W / r.width, (e.clientY - r.top) * PLOT.H / r.height];
+}
+function toData([px, py]) {
+  const { W, H, L, R, T, B } = PLOT;
+  return [view.x0 + (px - L) / (W - L - R) * spanX(), view.y0 + (H - B - py) / (H - T - B) * spanY()];
+}
+const IS_MAC = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
+let hintTimer = 0, suppressClick = false;
+function flashHint(msg) {
+  const h = $("zoomHint"); h.textContent = msg; h.classList.add("show");
+  clearTimeout(hintTimer); hintTimer = setTimeout(() => h.classList.remove("show"), 1100);
+}
+function initZoom() {
+  const svg = $("scatter"), mod = IS_MAC ? "⌘" : "Ctrl";
+  $("mapHelp").textContent = `Zoom: ${mod} + scroll, pinch, double-click, or the + / − buttons · Drag to move around when zoomed`;
+  $("zoomIn").onclick = () => zoomBy(0.5);
+  $("zoomOut").onclick = () => zoomBy(2);
+  $("zoomReset").onclick = () => animateView(FULL_VIEW);
+  $("zoomFit").onclick = zoomToMatches;
+  svg.addEventListener("wheel", e => {
+    if (!(e.ctrlKey || e.metaKey)) { flashHint(`Hold ${mod} and scroll to zoom`); return; }
+    e.preventDefault(); hideTip();
+    const [cx, cy] = toData(svgPoint(e));
+    zoomBy(Math.exp(Math.max(-1, Math.min(1, e.deltaY * 0.01))), cx, cy, false);
+  }, { passive: false });
+  svg.addEventListener("dblclick", e => {
+    e.preventDefault();
+    const [cx, cy] = toData(svgPoint(e));
+    zoomBy(e.shiftKey ? 2 : 0.5, cx, cy);
+  });
+  svg.addEventListener("keydown", e => {
+    const pan = (dx, dy) => animateView({ x0: view.x0 + dx * spanX(), x1: view.x1 + dx * spanX(), y0: view.y0 + dy * spanY(), y1: view.y1 + dy * spanY() }, 150);
+    const k = { "+": () => zoomBy(0.5), "=": () => zoomBy(0.5), "-": () => zoomBy(2), "0": () => animateView(FULL_VIEW),
+      ArrowLeft: () => pan(-0.2, 0), ArrowRight: () => pan(0.2, 0), ArrowUp: () => pan(0, 0.2), ArrowDown: () => pan(0, -0.2) }[e.key];
+    if (k) { e.preventDefault(); k(); }
+  });
+  // drag to pan (only meaningful when zoomed)
+  svg.addEventListener("pointerdown", e => {
+    if (e.button !== 0 || !isZoomed()) return;
+    const start = svgPoint(e), v0 = { ...view };
+    const sxPer = spanX() / (PLOT.W - PLOT.L - PLOT.R), syPer = spanY() / (PLOT.H - PLOT.T - PLOT.B);
+    let moved = false;
+    const move = ev => {
+      const [px, py] = svgPoint(ev), dx = px - start[0], dy = py - start[1];
+      if (!moved && Math.hypot(dx, dy) < 4) return;
+      if (!moved) { moved = true; svg.classList.add("panning"); hideTip(); cancelAnimationFrame(viewAnim); }
+      view = clampView({ x0: v0.x0 - dx * sxPer, x1: v0.x1 - dx * sxPer, y0: v0.y0 + dy * syPer, y1: v0.y1 + dy * syPer });
+      scheduleScatter();
+    };
+    const up = () => {
+      window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", up);
+      svg.classList.remove("panning");
+      if (moved) { suppressClick = true; setTimeout(() => suppressClick = false, 0); }
+    };
+    window.addEventListener("pointermove", move); window.addEventListener("pointerup", up);
+  });
+}
+function niceStep(span) { return [1, 2, 5, 10, 25].find(s => span / s <= 5) || 25; }
+
 let lastMatchIds = new Set();
 function renderScatter(stale) {
   if (stale === false) lastMatchIds = new Set(state.matches.map(m => m.s.id));
-  const W = 760, H = 420, L = 48, R = 16, T = 12, B = 40;
-  const x = v => L + v / 100 * (W - L - R), y = v => H - B - v / 100 * (H - T - B);
-  const xa = ATTRS.find(a => a.key === xKey), ya = ATTRS.find(a => a.key === yKey);
-  let g = "";
-  for (let i = 0; i <= 100; i += 25) {
+  const { W, H, L, R, T, B } = PLOT;
+  const x = v => L + (v - view.x0) / spanX() * (W - L - R), y = v => H - B - (v - view.y0) / spanY() * (H - T - B);
+  const inView = (s, m = 3) => { const a = norm(s, xKey), b = norm(s, yKey); return a >= view.x0 - m && a <= view.x1 + m && b >= view.y0 - m && b <= view.y1 + m; };
+  const xa = attrOf(xKey), ya = attrOf(yKey), zoomed = isZoomed();
+  const fmtTick = v => Number.isInteger(v) ? v : v.toFixed(1);
+  let g = `<defs><clipPath id="plotClip"><rect x="${L}" y="${T}" width="${W - L - R}" height="${H - T - B}"/></clipPath></defs>`;
+  const xs = niceStep(spanX()), ys = niceStep(spanY());
+  for (let i = Math.ceil(view.x0 / xs - 1e-9) * xs; i <= view.x1 + 1e-9; i += xs) {
     g += `<line x1="${x(i)}" x2="${x(i)}" y1="${T}" y2="${H - B}" stroke="var(--grid)"/>`;
-    g += `<line x1="${L}" x2="${W - R}" y1="${y(i)}" y2="${y(i)}" stroke="var(--grid)"/>`;
-    g += `<text x="${x(i)}" y="${H - B + 16}" font-size="13" fill="var(--text-secondary)" text-anchor="middle">${i}</text>`;
-    g += `<text x="${L - 8}" y="${y(i) + 4}" font-size="13" fill="var(--text-secondary)" text-anchor="end">${i}</text>`;
+    g += `<text x="${x(i)}" y="${H - B + 16}" font-size="13" fill="var(--text-secondary)" text-anchor="middle">${fmtTick(i)}</text>`;
   }
-  g += `<text x="${(L + W - R) / 2}" y="${H - 6}" font-size="14" fill="var(--text-primary)" text-anchor="middle">${xa.label} → (${xa.lo} … ${xa.hi})</text>`;
-  g += `<text transform="translate(14 ${(T + H - B) / 2}) rotate(-90)" font-size="14" fill="var(--text-primary)" text-anchor="middle">${ya.label} → (${ya.lo} … ${ya.hi})</text>`;
+  for (let i = Math.ceil(view.y0 / ys - 1e-9) * ys; i <= view.y1 + 1e-9; i += ys) {
+    g += `<line x1="${L}" x2="${W - R}" y1="${y(i)}" y2="${y(i)}" stroke="var(--grid)"/>`;
+    g += `<text x="${L - 8}" y="${y(i) + 4}" font-size="13" fill="var(--text-secondary)" text-anchor="end">${fmtTick(i)}</text>`;
+  }
+  // direction words at the axis ends (the dropdowns name the attribute)
+  g += `<text x="${L}" y="${H - 8}" font-size="13" fill="var(--text-muted)">← ${xa.lo}</text>`;
+  g += `<text x="${W - R}" y="${H - 8}" font-size="13" fill="var(--text-muted)" text-anchor="end">${xa.hi} →</text>`;
+  g += `<text transform="translate(16 ${H - B}) rotate(-90)" font-size="13" fill="var(--text-muted)">← ${ya.lo}</text>`;
+  g += `<text transform="translate(16 ${T}) rotate(-90)" font-size="13" fill="var(--text-muted)" text-anchor="end">${ya.hi} →</text>`;
 
+  g += `<g clip-path="url(#plotClip)">`;
   // target window (only drawn on enabled axes)
   const tx = state.target[xKey], ty = state.target[yKey], t = state.tol;
   const x0 = state.enabled[xKey] ? Math.max(0, tx - t) : 0, x1 = state.enabled[xKey] ? Math.min(100, tx + t) : 100;
   const y0 = state.enabled[yKey] ? Math.max(0, ty - t) : 0, y1 = state.enabled[yKey] ? Math.min(100, ty + t) : 100;
   g += `<rect x="${x(x0)}" y="${y(y1)}" width="${x(x1) - x(x0)}" height="${y(y0) - y(y1)}" rx="6" fill="var(--change)" fill-opacity="0.06" stroke="var(--change)" stroke-dasharray="4 4"/>`;
 
+  // dots grow a little as you zoom in, so dense clusters separate and stay easy to hit
+  const grow = Math.min(1.8, 1 + Math.log2(zoomLevel()) * 0.25);
   const ids = lastMatchIds;
-  const ordered = [...SONGS].sort((a, b) => (ids.has(a.id) - ids.has(b.id)));
+  const visible = SONGS.filter(s => inView(s));
+  const ordered = [...visible].sort((a, b) => (ids.has(a.id) - ids.has(b.id)));
   ordered.forEach(s => {
     const cx = x(norm(s, xKey)), cy = y(norm(s, yKey)), m = ids.has(s.id);
-    g += `<circle class="pt" data-id="${s.id}" cx="${cx}" cy="${cy}" r="${m ? 5 : 3}" fill="${m ? "var(--match)" : "var(--dot-bg)"}" ${m ? 'stroke="var(--surface-1)" stroke-width="1.5"' : 'fill-opacity="0.7"'}/>`;
+    g += `<circle class="pt" data-id="${s.id}" cx="${cx}" cy="${cy}" r="${(m ? 5 : 3) * grow}" fill="${m ? "var(--match)" : "var(--dot-bg)"}" ${m ? 'stroke="var(--surface-1)" stroke-width="1.5"' : 'fill-opacity="0.7"'}/>`;
+  });
+  // when zoomed in far enough, name the recommended songs directly on the map
+  if (zoomLevel() >= 3) visible.filter(s => ids.has(s.id) && s !== state.baseline).forEach(s => {
+    g += `<text x="${x(norm(s, xKey)) + 8 * grow}" y="${y(norm(s, yKey)) + 4}" font-size="12" fill="var(--text-secondary)" paint-order="stroke" stroke="var(--surface-1)" stroke-width="3" pointer-events="none">${s.title}</text>`;
   });
   if (state.hoverId != null) {
     const s = SONGS[state.hoverId];
-    g += `<circle cx="${x(norm(s, xKey))}" cy="${y(norm(s, yKey))}" r="10" fill="none" stroke="var(--text-primary)" stroke-width="2"/>`;
+    g += `<circle cx="${x(norm(s, xKey))}" cy="${y(norm(s, yKey))}" r="${10 * grow}" fill="none" stroke="var(--text-primary)" stroke-width="2"/>`;
   }
   if (state.baseline) {
     const s = state.baseline, bx = x(norm(s, xKey)), by = y(norm(s, yKey));
-    g += `<circle cx="${bx}" cy="${by}" r="9" fill="none" stroke="var(--baseline)" stroke-width="2.5"/>`;
-    g += `<text x="${bx + 13}" y="${by + 4}" font-size="14" font-weight="600" fill="var(--text-primary)" paint-order="stroke" stroke="var(--surface-1)" stroke-width="3">${s.title}</text>`;
+    g += `<circle cx="${bx}" cy="${by}" r="${9 * grow}" fill="none" stroke="var(--baseline)" stroke-width="2.5"/>`;
+    g += `<text x="${bx + 13 * grow}" y="${by + 4}" font-size="14" font-weight="600" fill="var(--text-primary)" paint-order="stroke" stroke="var(--surface-1)" stroke-width="3">${s.title}</text>`;
   }
   // invisible larger hit targets
-  SONGS.forEach(s => g += `<circle class="hit" data-id="${s.id}" cx="${x(norm(s, xKey))}" cy="${y(norm(s, yKey))}" r="6" fill="transparent" style="cursor:pointer"/>`);
+  visible.forEach(s => g += `<circle class="hit" data-id="${s.id}" cx="${x(norm(s, xKey))}" cy="${y(norm(s, yKey))}" r="${6 * grow}" fill="transparent" style="cursor:pointer"/>`);
+  g += `</g>`;
   const svg = $("scatter"); svg.innerHTML = g;
+  svg.classList.toggle("zoomed", zoomed);
+  $("zoomReset").disabled = !zoomed;
+  $("zoomReset").textContent = zoomed ? `Reset (${zoomLevel().toFixed(1)}×)` : "Reset";
+  $("zoomOut").disabled = !zoomed;
+  $("zoomIn").disabled = spanX() <= MIN_SPAN + 0.01 && spanY() <= MIN_SPAN + 0.01;
+  svg.setAttribute("aria-label", `Scatter plot of songs: ${xa.label} across, ${ya.label} up${zoomed ? `, zoomed ${zoomLevel().toFixed(1)} times` : ""}. Plus and minus keys zoom, arrow keys pan.`);
   svg.querySelectorAll(".hit").forEach(c => {
-    c.onmousemove = e => showTip(e, SONGS[+c.dataset.id]);
+    c.onmousemove = e => { if (!svg.classList.contains("panning")) showTip(e, SONGS[+c.dataset.id]); };
     c.onmouseleave = hideTip;
-    c.onclick = () => setBaseline(SONGS[+c.dataset.id]);
+    c.onclick = () => { if (!suppressClick) setBaseline(SONGS[+c.dataset.id]); };
   });
 }
 function showTip(e, s) {
@@ -962,7 +1157,7 @@ function renderMore(chosen) {
       </div>
       <span class="gtag ${isNew ? "new" : ""}">${s.genre}${isNew ? " · new for you" : ""}</span>
       <div class="title" title="${s.title}">${s.title}</div>
-      <div class="meta">${s.artist} · ${s.year}</div>
+      <div class="meta">${artistHTML(s.artist)} · ${s.year}</div>
       <div class="row"><span>${score}% match</span><button data-add="${s.id}">＋ Add</button></div>
     </div>`;
   }).join("");

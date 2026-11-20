@@ -9,3 +9,6 @@ songs.csv
 # Local Claude Code settings (launch.json is shared on purpose)
 .claude/*
 !.claude/launch.json
+
+# Raw Kaggle download for the key wheel — regenerate data/key_wheel.js with data/build_key_data.py
+dataset.csv

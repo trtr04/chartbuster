@@ -2,6 +2,8 @@
 
 An interactive prototype for exploring music taste by **audio attributes** (mood, energy, danceability, acousticness, tempo) rather than by genre or artist.
 
+Two more pages: **Artist profiles** (`artist-profiles.html`), and **Distributions & keys** (`key-wheel.html`): ridgeline charts of how song attributes are spread out, followed by *Études in twelve keys*, a circle of fifths showing which keys popular songs use.
+
 You search for a song you like, adjust its attributes, get song recommendations, and build a **spider chart** of your style from the songs you choose.
 
 > Status: course prototype (UW, Fall 2026). Single HTML page, no build step, no dependencies.
@@ -61,6 +63,35 @@ Colors mean the same thing everywhere (sliders, song map, spider chart):
 
 On a slider, a blue square marks the song's original value. Once you drag away from it, your handle turns orange and an orange line shows the difference.
 
+### Artist profiles (`artist-profiles.html`)
+
+One page per artist for 1,035 artists with 20+ tracks: a sound fingerprint (each attribute vs. the average artist, with percentile), a mood map of their top tracks, hits vs. deep cuts, top tracks and genres, and "Sounds like" artists you can click through. Search or press *Random artist*.
+
+- Open it from the link under the explorer's title, or click an **underlined artist name** in the explorer (search pill, recommendations, *More for you*). Names are only linked when that artist has a profile.
+- Deep link: `artist-profiles.html?artist=Katy%20Perry`. An unknown name shows a note and falls back to The Weeknd.
+- The page is self-contained (its data is inlined, about 1.5 MB). `data/artist_names.js` lists which artists have a profile; if the page's data changes, rebuild it with `python3 data/build_artist_names.py artist-profiles.html data/artist_names.js`.
+
+### Distributions & keys (`key-wheel.html`)
+
+The page has two parts, top to bottom.
+
+**1. Song attribute ridgelines.** One smooth curve (density) per row, every attribute on a 0–1 scale. The color inside each curve is the average popularity of songs at that value; the tick marks the median.
+
+- **Dataset**: the explorer's 900 songs, or the 114k-track Spotify dataset (binned).
+- **View**: all attributes for one genre, one attribute across genres, or one attribute across year ranges (900 songs only, since the 114k set has no years).
+- Hover for counts, median, middle half, and the share of songs below the cursor. *How to read this chart* explains the scaling.
+- Data: `data/ridgelines.js` (about 2 MB). Uses d3 from a CDN.
+
+**2. Études in twelve keys** (below the ridgelines):
+
+A circle of fifths built from about 90k Spotify tracks. Open the page from the link under the explorer's title or the nav bar; *Skip to Études in twelve keys ↓* jumps past the ridgelines.
+
+- **Outer ring = major keys, inner ring = their relative minors.** Bar length is the share of songs in that key; both rings use the same scale.
+- **Songs** dropdown: filter by popularity (default *Hits: popularity 60+*). The dashed outline shows every song in the same genre family, so you can see which keys hits favor.
+- **Genre chips / Movements**: nine genre families (Pop, Hip-hop & R&B, Rock, Metal & punk, Electronic, Latin, Country & folk, Jazz & blues, Classical & calm), each also drawn as a small wheel.
+- **Click a key** for its key signature, share, average mood / energy / BPM, the most popular songs in it (links to Spotify), and a ▶ button that plays the chord.
+- Three notes under the wheel sum up the current view: most common key, major vs. minor split, and whether minor songs score sadder on mood.
+
 ---
 
 ## Data
@@ -83,6 +114,18 @@ python3 data/build_data.py path/to/songs.csv data/spotify_songs.js
 
 The raw CSV is not committed (see `.gitignore`).
 
+### Key wheel data
+
+**Source:** [Spotify Tracks Dataset](https://www.kaggle.com/datasets/maharshipandya/-spotify-tracks-dataset) on Kaggle (`dataset.csv`, 114,000 rows, 114 genres, 89,741 unique tracks). It has Spotify's estimated `key` and `mode` (major/minor), real BPM `tempo`, and a 0–100 `popularity` score, but no release dates.
+
+`data/key_wheel.js` (about 150 KB) holds counts per key, mode, popularity band and genre family, plus the top five songs per key. Rebuild it with:
+
+```bash
+python3 data/build_key_data.py path/to/dataset.csv data/key_wheel.js
+```
+
+Key and mode are automatic estimates; Spotify often confuses a major key with its relative minor, so the major/minor split is approximate.
+
 ---
 
 ## Project structure
@@ -91,9 +134,16 @@ The raw CSV is not committed (see `.gitignore`).
 .
 ├── index.html                 # Redirects to style-explorer.html (GitHub Pages entry)
 ├── style-explorer.html        # The whole app: HTML, CSS and JS
+├── artist-profiles.html       # Artist profiles page (data inlined)
+├── key-wheel.html             # Distributions & keys: ridgelines + circle of fifths
 ├── data/
 │   ├── spotify_songs.js       # Trimmed dataset (window.SONG_DATA)
-│   └── build_data.py          # CSV → JS converter
+│   ├── build_data.py          # CSV → JS converter
+│   ├── artist_names.js        # Artists that have a profile (for explorer links)
+│   ├── build_artist_names.py  # artist-profiles.html → artist_names.js
+│   ├── ridgelines.js          # Ridgeline data (900 songs CSV + binned 114k tracks)
+│   ├── key_wheel.js           # Key/mode aggregates (window.KEY_DATA)
+│   └── build_key_data.py      # dataset.csv → key_wheel.js
 ├── Concept_proposal_Nov5.docx # Original concept proposal
 └── .claude/launch.json        # Local dev-server config (optional)
 ```
