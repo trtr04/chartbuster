@@ -360,15 +360,41 @@
   }
   .toast.show { opacity: 1; }
   .note { font-size: var(--fs-small); color: var(--text-muted); padding: 8px 0 24px; }
+
+  /* ---- site bar: identical on every page ---- */
+  .sb { position: sticky; top: 0; z-index: 80; background: color-mix(in srgb, var(--bg) 88%, transparent); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); border-bottom: 1px solid var(--border); font: 14px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, sans-serif; }
+  .sb-in { max-width: 1240px; margin: 0 auto; padding: 0 28px; display: flex; align-items: center; gap: 20px; height: 52px; }
+  .sb-brand { font-weight: 700; color: var(--text-primary, var(--ink)); text-decoration: none; white-space: nowrap; }
+  .sb-brand .sb-clef { font-family: "Apple Symbols", "Segoe UI Symbol", "Noto Music", serif; font-size: 1.2em; margin-right: 4px; }
+  .sb-links { display: flex; gap: 4px; flex: 1; overflow-x: auto; scrollbar-width: none; }
+  .sb-links::-webkit-scrollbar { display: none; }
+  .sb-short { display: none; }
+  .sb-links a { color: var(--text-secondary); text-decoration: none; padding: 15px 12px 13px; border-bottom: 2px solid transparent; white-space: nowrap; }
+  .sb-links a:hover { color: var(--text-primary, var(--ink)); }
+  .sb-links a[aria-current="page"] { color: var(--text-primary, var(--ink)); font-weight: 600; border-bottom-color: currentColor; }
+  .sb-links a:focus-visible, .sb-theme:focus-visible, .sb-brand:focus-visible { outline: 2px solid var(--series-1, var(--accent)); outline-offset: -2px; border-radius: 4px; }
+  button.sb-theme { margin-left: auto; flex: none; display: inline-flex; align-items: center; gap: 6px; font: inherit; font-size: 14px; color: var(--text-primary, var(--ink)); background: var(--surface-1); border: 1px solid var(--border); border-radius: 999px; padding: 5px 12px; cursor: pointer; }
+  button.sb-theme:hover { border-color: var(--text-muted); }
+  @media (max-width: 640px) { .sb-in { padding: 0 12px; gap: 8px; } .sb-brand .sb-name, .sb-theme .sb-lbl { display: none; } .sb-long { display: none; } .sb-short { display: inline !important; } .sb-links a { padding: 15px 8px 13px; } }
 </style>
 </head>
 <body class="locked">
+<header class="sb">
+  <div class="sb-in">
+    <a class="sb-brand" href="style-explorer.html"><span class="sb-clef" aria-hidden="true">𝄞</span><span class="sb-name">Chart Busters</span></a>
+    <nav class="sb-links" aria-label="Pages">
+      <a href="style-explorer.html" aria-current="page"><span class="sb-long">Style Explorer</span><span class="sb-short">Explorer</span></a>
+      <a href="artist-profiles.html"><span class="sb-long">Artist profiles</span><span class="sb-short">Artists</span></a>
+      <a href="key-wheel.html"><span class="sb-long">Distributions &amp; keys</span><span class="sb-short">Distributions</span></a>
+    </nav>
+    <button class="sb-theme" id="themeToggle" aria-label="Switch to dark mode"><span id="themeIco">☾</span><span class="sb-lbl" id="themeLbl">Dark</span></button>
+  </div>
+</header>
 
 <div class="page">
 
 <!-- ============ 1. Search first ============ -->
 <header class="hero">
-  <button class="theme-toggle" id="themeToggle" aria-label="Switch to dark mode"><span class="ico" id="themeIco">☾</span><span id="themeLbl">Dark</span></button>
   <svg class="staff" viewBox="0 0 1100 260" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
     <g stroke="currentColor" stroke-width="1.5">
       <line x1="0" x2="1100" y1="90" y2="90"/><line x1="0" x2="1100" y1="110" y2="110"/><line x1="0" x2="1100" y1="130" y2="130"/><line x1="0" x2="1100" y1="150" y2="150"/><line x1="0" x2="1100" y1="170" y2="170"/>
@@ -383,7 +409,6 @@
     </g>
   </svg>
   <p class="brand"><span class="clef" aria-hidden="true">𝄞</span>Chart Busters · Music Style Explorer</p>
-  <p class="brand-link"><a href="artist-profiles.html">Artist profiles →</a><span aria-hidden="true">·</span><a href="key-wheel.html">How songs are distributed, and which keys they use →</a></p>
   <h1>What's your favorite song?</h1>
   <div class="search-row">
     <input type="search" id="search" placeholder="🔍  Song or artist, e.g. Blinding Lights" autocomplete="off" aria-label="What's your favorite song?" />
